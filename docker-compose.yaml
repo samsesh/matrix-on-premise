@@ -1,13 +1,18 @@
 version: '3'
 services:
-  element:
-    image: vectorim/element-web:latest
+  coturn:
+    image: instrumentisto/coturn:latest
     restart: unless-stopped
     volumes:
-      - ./element-config.json:/app/config.json
-      - ./element-theme:/app/themes/samsesh
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
     ports:
-      - "8080:80"
+      - "49160-49200:49160-49200/udp"
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+    networks:
+      - matrix-network
 
   synapse:
     image: matrixdotorg/synapse:latest
@@ -17,19 +22,48 @@ services:
     ports:
       - "8008:8008"
       - "8448:8448"
+    environment:
+      - TZ=${TZ:-UTC}
+      - UID=${UID:-991}
+      - GID=${GID:-991}
+      - SYNAPSE_SERVER_NAME=${SYNAPSE_SERVER_NAME:-localhost}
+      - SYNAPSE_REPORT_STATS=${SYNAPSE_REPORT_STATS:-yes}
+      - SYNAPSE_VOIP_TURN_MAIN_URL=turn:${TURN_SERVER:-localhost}:3478?transport=udp
+      - SYNAPSE_VOIP_TURN_USERNAME=${TURN_USERNAME:-}
+      - SYNAPSE_VOIP_TURN_PASSWORD=${TURN_PASSWORD:-}
+    depends_on:
+      - coturn
+    networks:
+      - matrix-network
+
+  element:
+    image: vectorim/element-web:latest
+    restart: unless-stopped
+    volumes:
+      - ./element-config.json:/app/config.json
+      - ./element-theme:/app/themes/samsesh
+    ports:
+      - "8080:80"
+    environment:
+      - MATRIX_THEMES=light,dark
+    depends_on:
+      - synapse
+    networks:
+      - matrix-network
 
   synapse-admin:
     image: awesometechnologies/synapse-admin
     restart: unless-stopped
     ports:
       - "8081:80"
+    environment:
+      - REACT_APP_SERVER=http://synapse:8008
+    depends_on:
+      - synapse
+    networks:
+      - matrix-network
 
-  coturn:
-    image: instrumentisto/coturn:latest
-    restart: unless-stopped
-    volumes:
-      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
-    ports:
-      - "49160-49200:49160-49200/udp"
-      - "3478:3478"
-      - "5349:5349"
+networks:
+  matrix-network:
+    name: matrix-network
+    driver: bridge
