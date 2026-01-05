@@ -7,6 +7,7 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 - 🚀 **One-Command Setup**: Automated installation with interactive script
 - 💬 **Modern UI**: Element Web client with custom Samsesh branding
 - 🎥 **Voice & Video**: Built-in Coturn TURN server for reliable calls
+- 📞 **Element Call**: Standalone video conferencing for group calls
 - 🛠️ **Admin Panel**: Web-based administration interface
 - 🔒 **Privacy First**: Self-hosted with no data collection
 - 📦 **Containerized**: Easy deployment with Docker Compose
@@ -21,7 +22,7 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 1. A Linux server (Ubuntu 20.04+ recommended)
 2. Docker and Docker Compose installed
 3. Public IP address (for external access)
-4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 3478/5349 (TURN)
+4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 3478/5349 (TURN)
 
 ## Quick Start
 
@@ -66,9 +67,10 @@ Available environment variables:
 | `TURN_SERVER` | `localhost` | TURN server hostname/IP for voice/video calls |
 | `TURN_SHARED_SECRET` | *(empty)* | TURN server shared secret for authentication |
 | `MATRIX_THEMES` | `light,dark` | Available themes for Element web client |
+| `ELEMENT_CALL_PORT` | `8082` | Port for Element Call video conferencing service |
 
 **Note:** The docker-compose file now includes:
-- **Service dependencies**: Services start in the correct order (coturn → synapse → element/synapse-admin)
+- **Service dependencies**: Services start in the correct order (coturn → synapse → element/element-call/synapse-admin)
 - **Network isolation**: All services communicate through a dedicated `matrix-network`
 - **Environment-based configuration**: Easy customization without editing docker-compose.yaml
 
@@ -161,7 +163,7 @@ Update the `coturn/turnserver.conf` file:
     The services will start in the correct order:
     - First: coturn (TURN server)
     - Then: synapse (Matrix homeserver)
-    - Finally: element (web client) and synapse-admin (admin panel)
+    - Finally: element (web client), element-call (video conferencing), and synapse-admin (admin panel)
 
 1. Create an Admin User
     1. Access docker shell  
@@ -183,12 +185,14 @@ Update the `coturn/turnserver.conf` file:
     1. Element UI: <http://localhost:8080>
     1. Matrix Core Endpoint: <http://localhost:8008/_matrix>
     1. Admin WebUI: <http://localhost:8081>
+    1. Element Call: <http://localhost:8082>
 
 ## Accessing Your Server
 
 After installation, access your services at:
 
 - **Element Web (Chat Interface)**: `http://localhost:8080` or `http://your-server-ip:8080`
+- **Element Call (Video Conferencing)**: `http://localhost:8082` or `http://your-server-ip:8082`
 - **Synapse API**: `http://localhost:8008`
 - **Synapse Admin Panel**: `http://localhost:8081`
 
@@ -308,7 +312,7 @@ For production use, consider:
 4. **Service Dependencies**: The docker-compose configuration ensures services start in the correct order:
    - Coturn starts first (TURN server for voice/video)
    - Synapse starts after coturn is ready (Matrix homeserver)
-   - Element and synapse-admin start after synapse is ready
+   - Element, Element Call, and synapse-admin start after synapse is ready
 5. **Environment Variables**: Use the `.env` file to customize your deployment without editing docker-compose.yaml
 
 ## Further reading and references
