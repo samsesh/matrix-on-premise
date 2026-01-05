@@ -234,10 +234,15 @@ docker compose logs
 
 1. **Use HTTPS**: Set up a reverse proxy (nginx/Caddy) with SSL certificates
 2. **Firewall**: Only expose necessary ports
-3. **Regular Updates**: Keep Docker images updated
+3. **Regular Updates**: Keep Docker images updated with `docker compose pull && docker compose up -d`
 4. **Backups**: Regularly backup your data
 5. **Strong Passwords**: Use complex passwords for admin accounts
 6. **Disable Open Registration**: After creating accounts, disable open registration
+7. **Secure Configuration Files**: The setup script automatically secures sensitive files with chmod 600
+   - `.setup-config` - Contains Coturn secret and admin username
+   - `coturn/turnserver.conf` - Contains Coturn authentication secrets
+   - Keep these files secure and never commit them to version control
+8. **Clear Terminal History**: After setup, clear your shell history: `history -c`
 
 ## Production Deployment
 

@@ -62,6 +62,15 @@ validate_ip() {
     return 0
 }
 
+# Function to validate port number
+validate_port() {
+    local port=$1
+    if [[ ! $port =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+        return 1
+    fi
+    return 0
+}
+
 # Function to generate random password
 generate_password() {
     openssl rand -base64 32 | tr -d "=+/" | cut -c1-25
@@ -139,15 +148,35 @@ echo ""
 
 read -p "Element Web port [default: 8080]: " ELEMENT_PORT
 ELEMENT_PORT=${ELEMENT_PORT:-8080}
+while ! validate_port "$ELEMENT_PORT"; do
+    print_error "Invalid port number (must be 1-65535)."
+    read -p "Element Web port [default: 8080]: " ELEMENT_PORT
+    ELEMENT_PORT=${ELEMENT_PORT:-8080}
+done
 
 read -p "Synapse port [default: 8008]: " SYNAPSE_PORT
 SYNAPSE_PORT=${SYNAPSE_PORT:-8008}
+while ! validate_port "$SYNAPSE_PORT"; do
+    print_error "Invalid port number (must be 1-65535)."
+    read -p "Synapse port [default: 8008]: " SYNAPSE_PORT
+    SYNAPSE_PORT=${SYNAPSE_PORT:-8008}
+done
 
 read -p "Synapse federation port [default: 8448]: " FEDERATION_PORT
 FEDERATION_PORT=${FEDERATION_PORT:-8448}
+while ! validate_port "$FEDERATION_PORT"; do
+    print_error "Invalid port number (must be 1-65535)."
+    read -p "Synapse federation port [default: 8448]: " FEDERATION_PORT
+    FEDERATION_PORT=${FEDERATION_PORT:-8448}
+done
 
 read -p "Synapse Admin port [default: 8081]: " ADMIN_PORT
 ADMIN_PORT=${ADMIN_PORT:-8081}
+while ! validate_port "$ADMIN_PORT"; do
+    print_error "Invalid port number (must be 1-65535)."
+    read -p "Synapse Admin port [default: 8081]: " ADMIN_PORT
+    ADMIN_PORT=${ADMIN_PORT:-8081}
+done
 
 echo ""
 print_info "=== Configuration Summary ==="
@@ -390,11 +419,8 @@ echo "$ADMIN_PASSWORD" | docker compose exec -T synapse register_new_matrix_user
     -u "$ADMIN_USERNAME" \
     --password-file /dev/stdin \
     -a \
-    http://localhost:8008 2>/dev/null || {
-    # Fallback to interactive method if password-file not supported
-    docker compose exec -T synapse bash -c "register_new_matrix_user -c /data/homeserver.yaml -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -a http://localhost:8008" 2>/dev/null || \
+    http://localhost:8008 2>/dev/null || \
     print_warning "Admin user creation failed. You can create it manually later with: docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008"
-}
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
