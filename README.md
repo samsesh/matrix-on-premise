@@ -45,7 +45,7 @@ This doc is the minimal and most straightforward approach that I could get to se
     ```bash
     "default_server_config": {
         "m.homeserver": {
-            "base_url": "http://synapse:8008",
+            "base_url": "http://localhost:8008",
             "server_name": "localhost"
         },
         "m.identity_server": {
@@ -64,9 +64,9 @@ This doc is the minimal and most straightforward approach that I could get to se
         matrixdotorg/synapse:latest generate
     ```
 
-1. As its common that your client are behind NATed network traffic you may need to add TURN service to your setup for reliable VoIP connections.  
-Note: This is required only for mobile devices (iOS and Android), The Element Web UI is using WebRTC which enables port punching though NAT network without TURN.  
-Update the `coturn/turnserver.config` file:
+1. As it's common that your client are behind NATed network traffic you may need to add TURN service to your setup for reliable VoIP connections.  
+Note: This is required only for mobile devices (iOS and Android), The Element Web UI is using WebRTC which enables port punching through NAT network without TURN.  
+Update the `coturn/turnserver.conf` file:
     1. Update the password `SOMESECURETEXT`
     1. Add the Server Public IP at the last line
     1. Replace with your domain if you have one (otherwise use localhost)
@@ -112,7 +112,7 @@ Update the `coturn/turnserver.config` file:
     1. Matrix Core Endpoint: <http://localhost:8008/_matrix>
     1. Admin WebUI: <http://localhost:8081>
 
-1. Thats it, all done. you can create users with the admin web ui and download the client App from:
+1. That's it, all done. you can create users with the admin web ui and download the client App from:
 
     1. iOS: <https://apps.apple.com/us/app/element-messenger/id1083446067>  
     1. Android: <https://play.google.com/store/apps/details?id=im.vector.app&hl=en&gl=US>  
