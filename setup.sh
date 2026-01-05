@@ -76,6 +76,10 @@ generate_password() {
     openssl rand -base64 32 | tr -d "=+/" | cut -c1-25
 }
 
+# Constants
+LIVEKIT_JWT_PORT=8083
+LIVEKIT_SFU_PORT=7880
+
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║   Matrix On-Premise Setup - Samsesh Chat                  ║"
@@ -125,7 +129,7 @@ COTURN_SECRET=$(generate_password)
 print_success "Coturn secret generated"
 
 # Generate LiveKit credentials
-LIVEKIT_KEY=$(openssl rand -hex 16)
+LIVEKIT_KEY=$(openssl rand -hex 32)
 LIVEKIT_SECRET=$(openssl rand -hex 32)
 print_success "LiveKit credentials generated"
 
@@ -422,11 +426,14 @@ print_success "Element configuration created"
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     print_info "Creating Element Call configuration..."
     
+    # Define LiveKit JWT service port
+    LIVEKIT_JWT_PORT=8083
+    
     # Determine the lk-jwt-service URL
     if [ "$MATRIX_DOMAIN" = "localhost" ]; then
-        LIVEKIT_JWT_URL="http://$SERVER_IP:8083"
+        LIVEKIT_JWT_URL="http://$SERVER_IP:$LIVEKIT_JWT_PORT"
     else
-        LIVEKIT_JWT_URL="http://$MATRIX_DOMAIN:8083"
+        LIVEKIT_JWT_URL="http://$MATRIX_DOMAIN:$LIVEKIT_JWT_PORT"
     fi
     
     cat > element-call-config.json << EOF
@@ -447,9 +454,13 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
 EOF
     print_success "Element Call configuration created with LiveKit support"
     
-    # Update livekit.yaml with generated credentials
+    # Update livekit.yaml with generated credentials using a more robust method
     print_info "Configuring LiveKit with secure credentials..."
-    sed -i "s/devkey: secret/$LIVEKIT_KEY: $LIVEKIT_SECRET/" livekit.yaml
+    # Create a temporary file with the updated keys section
+    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" '
+        /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
+        { print }
+    ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
     print_success "LiveKit configuration updated"
 fi
 
@@ -671,8 +682,8 @@ echo "Access your services at:"
 echo "  • Element Web:     http://localhost:$ELEMENT_PORT"
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT (with LiveKit backend)"
-    echo "  • LiveKit SFU:     ws://localhost:7880"
-    echo "  • lk-jwt-service:  http://localhost:8083"
+    echo "  • LiveKit SFU:     ws://localhost:$LIVEKIT_SFU_PORT"
+    echo "  • lk-jwt-service:  http://localhost:$LIVEKIT_JWT_PORT"
 fi
 echo "  • Synapse API:     http://localhost:$SYNAPSE_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"

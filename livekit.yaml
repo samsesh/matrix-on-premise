@@ -9,7 +9,8 @@ rtc:
   # Port range for WebRTC traffic
   port_range_start: 50000
   port_range_end: 60000
-  # Use mDNS for local network discovery (set to false for production)
+  # Use external IP for WebRTC connections
+  # Set to false for local/internal deployments
   use_external_ip: true
 
 # UDP port for ICE/STUN
