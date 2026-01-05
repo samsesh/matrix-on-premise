@@ -39,6 +39,8 @@ chmod +x setup.sh
 
 The script will guide you through:
 - Server configuration (IP, domain)
+- System configuration (timezone)
+- Video conferencing choice (Element Call or Jitsi)
 - Admin user creation
 - Port configuration
 - Automatic service deployment
@@ -242,11 +244,31 @@ cp coturn/turnserver.conf coturn-backup.conf
 
 ### Custom Branding
 
-The setup includes Samsesh Chat branding by default. To customize:
+The setup includes **SamSesh Chat** branding with dark mode enabled by default. The Element Web interface includes:
+- Custom brand name: "SamSesh Chat"
+- Footer links to SamSesh website, blog, and donation page
+- Dark theme as default (users can switch to light mode)
+- Custom logo and theming
 
-1. Edit `element-config.json` and change the `brand` field
+To customize branding:
+1. Edit `element-config.json` and change the `brand` field, `footer_links`, and `default_theme`
 2. Replace logo in `element-theme/logo.png` with your own
 3. Restart Element: `docker compose restart element`
+
+### Video Conferencing Options
+
+During setup, you can choose between two video conferencing solutions:
+
+1. **Element Call** (Recommended)
+   - Self-hosted and fully integrated
+   - No third-party dependencies
+   - Better privacy and control
+   - Accessible at port 8082
+
+2. **Jitsi**
+   - Uses meet.element.io by default (or your own Jitsi server)
+   - External service
+   - Can specify custom Jitsi domain
 
 ### Enable Additional Features
 

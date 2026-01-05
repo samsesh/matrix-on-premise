@@ -154,6 +154,39 @@ read -p "Enable open user registration? (yes/no) [default: no]: " ENABLE_REGISTR
 ENABLE_REGISTRATION=${ENABLE_REGISTRATION:-no}
 
 echo ""
+print_info "=== System Configuration ==="
+echo ""
+
+read -p "Enter timezone [default: UTC]: " TIMEZONE
+TIMEZONE=${TIMEZONE:-UTC}
+
+echo ""
+print_info "=== Video Conferencing Configuration ==="
+echo ""
+echo "Choose your video conferencing service:"
+echo "  1) Element Call (Recommended - Self-hosted, fully integrated)"
+echo "  2) Jitsi (Uses meet.element.io by default)"
+echo ""
+read -p "Select option (1 or 2) [default: 1]: " VIDEO_CONF_CHOICE
+VIDEO_CONF_CHOICE=${VIDEO_CONF_CHOICE:-1}
+
+while [[ ! "$VIDEO_CONF_CHOICE" =~ ^[12]$ ]]; do
+    print_error "Invalid choice. Please enter 1 or 2."
+    read -p "Select option (1 or 2) [default: 1]: " VIDEO_CONF_CHOICE
+    VIDEO_CONF_CHOICE=${VIDEO_CONF_CHOICE:-1}
+done
+
+if [ "$VIDEO_CONF_CHOICE" = "2" ]; then
+    read -p "Enter Jitsi domain [default: meet.element.io]: " JITSI_DOMAIN
+    JITSI_DOMAIN=${JITSI_DOMAIN:-meet.element.io}
+    USE_ELEMENT_CALL="no"
+    print_info "Will use Jitsi at: $JITSI_DOMAIN"
+else
+    USE_ELEMENT_CALL="yes"
+    print_info "Will use Element Call for video conferencing"
+fi
+
+echo ""
 print_info "=== Port Configuration ==="
 echo ""
 
@@ -189,13 +222,15 @@ while ! validate_port "$ADMIN_PORT"; do
     ADMIN_PORT=${ADMIN_PORT:-8081}
 done
 
-read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
-ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
-while ! validate_port "$ELEMENT_CALL_PORT"; do
-    print_error "Invalid port number (must be 1-65535)."
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
     ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
-done
+    while ! validate_port "$ELEMENT_CALL_PORT"; do
+        print_error "Invalid port number (must be 1-65535)."
+        read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
+        ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
+    done
+fi
 
 echo ""
 print_info "=== Configuration Summary ==="
@@ -203,11 +238,19 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Server IP:        $SERVER_IP"
 echo "Matrix Domain:    $MATRIX_DOMAIN"
 echo "Admin Username:   $ADMIN_USERNAME"
+echo "Timezone:         $TIMEZONE"
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    echo "Video Conf:       Element Call"
+else
+    echo "Video Conf:       Jitsi ($JITSI_DOMAIN)"
+fi
 echo "Element Port:     $ELEMENT_PORT"
 echo "Synapse Port:     $SYNAPSE_PORT"
 echo "Federation Port:  $FEDERATION_PORT"
 echo "Admin Panel Port: $ADMIN_PORT"
-echo "Element Call Port: $ELEMENT_CALL_PORT"
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    echo "Element Call Port: $ELEMENT_CALL_PORT"
+fi
 echo "Coturn Secret:    [generated - will be saved securely]"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -294,7 +337,7 @@ cat > element-config.json << EOF
     "disable_guests": true,
     "disable_login_language_selector": false,
     "disable_3pid_login": false,
-    "default_theme": "light",
+    "default_theme": "dark",
     "room_directory": {
         "servers": [
             "$MATRIX_DOMAIN"
@@ -319,15 +362,33 @@ cat > element-config.json << EOF
         "https://scalar-staging.riot.im/scalar/api"
     ],
     "jitsi": {
-        "preferred_domain": "meet.element.io"
-    }
+        "preferred_domain": "$([ "$USE_ELEMENT_CALL" = "yes" ] && echo "meet.element.io" || echo "$JITSI_DOMAIN")"
+    },
+    "permalink_prefix": "https://samsesh.com",
+    "help_url": "https://blog.samsesh.com",
+    "bug_report_endpoint_url": "https://github.com/samsesh/matrix-on-premise/issues/new",
+    "footer_links": [
+        {
+            "text": "Website",
+            "url": "https://samsesh.com"
+        },
+        {
+            "text": "Blog",
+            "url": "https://blog.samsesh.com"
+        },
+        {
+            "text": "Donate",
+            "url": "https://samsesh.com/donate"
+        }
+    ]
 }
 EOF
 print_success "Element configuration created"
 
-# Create Element Call configuration
-print_info "Creating Element Call configuration..."
-cat > element-call-config.json << EOF
+# Create Element Call configuration (only if Element Call is chosen)
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    print_info "Creating Element Call configuration..."
+    cat > element-call-config.json << EOF
 {
   "default_server_config": {
     "m.homeserver": {
@@ -337,7 +398,8 @@ cat > element-call-config.json << EOF
   }
 }
 EOF
-print_success "Element Call configuration created"
+    print_success "Element Call configuration created"
+fi
 
 # Step 4: Update docker-compose.yml with custom ports
 print_info "Step 4/6: Updating docker-compose.yml..."
@@ -376,6 +438,11 @@ services:
     restart: unless-stopped
     ports:
       - "$ADMIN_PORT:80"
+EOF
+
+# Add Element Call service if selected
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
 
   element-call:
     image: ghcr.io/element-hq/element-call:latest
@@ -384,6 +451,10 @@ services:
       - "$ELEMENT_CALL_PORT:80"
     volumes:
       - ./element-call-config.json:/app/config.json
+EOF
+fi
+
+cat >> docker-compose.yaml << EOF
 
   coturn:
     image: instrumentisto/coturn:latest
@@ -490,7 +561,9 @@ print_success "Your Samsesh Chat server is now running!"
 echo ""
 echo "Access your services at:"
 echo "  • Element Web:     http://localhost:$ELEMENT_PORT"
-echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT"
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT"
+fi
 echo "  • Synapse API:     http://localhost:$SYNAPSE_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
 echo ""
@@ -506,8 +579,22 @@ echo ""
 cat > .setup-config << EOF
 SERVER_IP=$SERVER_IP
 MATRIX_DOMAIN=$MATRIX_DOMAIN
+TIMEZONE=$TIMEZONE
+VIDEO_CONF=$USE_ELEMENT_CALL
 ELEMENT_PORT=$ELEMENT_PORT
+EOF
+
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    cat >> .setup-config << EOF
 ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
+EOF
+else
+    cat >> .setup-config << EOF
+JITSI_DOMAIN=$JITSI_DOMAIN
+EOF
+fi
+
+cat >> .setup-config << EOF
 SYNAPSE_PORT=$SYNAPSE_PORT
 FEDERATION_PORT=$FEDERATION_PORT
 ADMIN_PORT=$ADMIN_PORT
