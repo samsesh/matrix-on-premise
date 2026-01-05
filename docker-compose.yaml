@@ -5,25 +5,23 @@ services:
     restart: unless-stopped
     volumes:
       - ./element-config.json:/app/config.json
-    networks:
-      default:
-        ipv4_address: 10.10.10.3
+    ports:
+      - "8080:80"
 
   synapse:
     image: matrixdotorg/synapse:latest
     restart: unless-stopped
-    networks:
-      default:
-        ipv4_address: 10.10.10.4
     volumes:
       - ./synapse:/data
+    ports:
+      - "8008:8008"
+      - "8448:8448"
 
   synapse-admin:
     image: awesometechnologies/synapse-admin
     restart: unless-stopped
-    networks:
-      default:
-        ipv4_address: 10.10.10.5
+    ports:
+      - "8081:80"
 
   coturn:
     image: instrumentisto/coturn:latest
@@ -31,15 +29,6 @@ services:
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
     ports:
-      - 49160-49200:49160-49200/udp
-      - 3478:3478
-      - 5349:5349
-    networks:
-      - mybridge
-  
-networks:
-  default:
-    external:
-      name: matrix_net
-  mybridge:
-    driver: bridge
+      - "49160-49200:49160-49200/udp"
+      - "3478:3478"
+      - "5349:5349"

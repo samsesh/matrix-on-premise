@@ -1,6 +1,6 @@
-# How to Self-Host synapse Matrix + Element + NGINX + Coturn + Admin Web UI (Docker Compose)
+# How to Self-Host synapse Matrix + Element + Coturn + Admin Web UI (Docker Compose)
 
-Here we will discuss the easiest way to install a chat platform for personal use cases with Docker Compose on a Linux server. We are not going into detail as I'm assuming the reader is familiar with Linux, Docker, NGINX, and some basic networking terms. But let me know if you think I should update this doc in advance.
+Here we will discuss the easiest way to install a chat platform for personal use cases with Docker Compose on a Linux server. We are not going into detail as I'm assuming the reader is familiar with Linux, Docker, and some basic networking terms. But let me know if you think I should update this doc in advance.
 This doc is the minimal and most straightforward approach that I could get to set up a private chat server with reliable VoIP and Video features. On the other hand, "Synapse Matrix" and "Element" are super powerful and customizable; peek at the official documentation.
 
 1. <https://matrix.org/docs/projects/server/synapse>
@@ -10,16 +10,12 @@ This doc is the minimal and most straightforward approach that I could get to se
 
 1. This setup is powered by SQLITE which is not production level database server consider using PostgreSQL instead.
 1. This setup is allowing user registration without any verification, but its easy to config a central authentication with LDAP server.
+1. Services communicate using container names instead of IP addresses for better portability.
 
 ## Requirements
 
 1. A Linux server with a Public IP
-1. Installed NGINX (we are not containerizing the NGINX installation)
-1. Two DNS records pointing to this server
-    1. m.example.com -> for the synapse matrix and admin WebUI
-    1. e.example.com -> for element WebUI
 1. Installed docker + docker compose
-1. Valid SSL certificates for the named DNS records
 
 ## Steps
 
@@ -28,26 +24,6 @@ This doc is the minimal and most straightforward approach that I could get to se
     ```bash
     mkdir $HOME/matrix
     cd $HOME/matrix
-    ```
-
-1. Create A or AAA DNS Records pointing to the Server Public IP
-    1. m.example.com -> for the synapse matrix and admin WebUI
-    1. e.example.com -> for element WebUI  
-
-1. Configure NGINX with the sample config `matrix.config` file, which can be found here
-    1. Replace example.com
-    1. Copy your SSL Certificates in the given path or use Certbot to generate certs  
-
-1. Restart NGINX
-
-    ```bash
-    sudo service nginx restart
-    ```
-
-1. Create a docker network for the matrix network (assuming this server is used by other services)
-
-    ```bash
-    sudo docker network create --driver=bridge --subnet=10.10.10.0/24 --gateway=10.10.10.1 matrix_net
     ```
 
 1. Create Element config and Copy and paste [example contents](https://develop.element.io/config.json) into your file.
@@ -64,13 +40,13 @@ This doc is the minimal and most straightforward approach that I could get to se
     sed -i '/"default_server_name": "matrix.org"/d' element-config.json
     ```
 
-1. Add our custom homeserver to the top of ‍‍‍`element-config.json` (Replace the Domain Name example.com)
+1. Add our custom homeserver to the top of ‍‍‍`element-config.json` (Use localhost or your server's IP/domain)
 
     ```bash
     "default_server_config": {
         "m.homeserver": {
-            "base_url": "https://m.example.com",
-            "server_name": "m.example.com"
+            "base_url": "http://synapse:8008",
+            "server_name": "localhost"
         },
         "m.identity_server": {
             "base_url": "https://vector.im"
@@ -78,32 +54,32 @@ This doc is the minimal and most straightforward approach that I could get to se
     },
     ```
 
-1. Generate Synapse config (homeserver.yaml) with this command (Replace the Domain Name example.com)
+1. Generate Synapse config (homeserver.yaml) with this command (Use localhost or your server's domain)
 
     ```bash
     sudo docker run -it --rm \
         -v "$HOME/matrix/synapse:/data" \
-        -e SYNAPSE_SERVER_NAME=m.example.com \
+        -e SYNAPSE_SERVER_NAME=localhost \
         -e SYNAPSE_REPORT_STATS=yes \
         matrixdotorg/synapse:latest generate
     ```
 
-1. As its common that your client are behind NATed network traffic you may need to add TRUN service to your setup for reliable VoIP connections.  
-Note: This is required only for mobile devices (iOS and Android), The Element Web UI is using WebRTC which enables port punching though NAT network without TRUN.  
-Update the `coturn\turnserver.config` file:
+1. As its common that your client are behind NATed network traffic you may need to add TURN service to your setup for reliable VoIP connections.  
+Note: This is required only for mobile devices (iOS and Android), The Element Web UI is using WebRTC which enables port punching though NAT network without TURN.  
+Update the `coturn/turnserver.config` file:
     1. Update the password `SOMESECURETEXT`
     1. Add the Server Public IP at the last line
-    1. replace the `example.com`
+    1. Replace with your domain if you have one (otherwise use localhost)
 
-1. Add Coturn configs to the `homeserver.yml`
-    Replace the configs form the previous step
+1. Add Coturn configs to the `homeserver.yml` (Replace with your domain or use localhost)
+    Replace the configs from the previous step
 
     ```bash
     turn_uris:
-    - "turn:m.example.com:3478?transport=udp"
-    - "turn:m.example.com:3478?transport=tcp"
-    - "turns:m.example.com:3478?transport=udp"
-    - "turns:m.example.com:3478?transport=tcp"
+    - "turn:localhost:3478?transport=udp"
+    - "turn:localhost:3478?transport=tcp"
+    - "turns:localhost:5349?transport=udp"
+    - "turns:localhost:5349?transport=tcp"
     turn_shared_secret: "SOMESECURETEXT"
     turn_user_lifetime: 1h
     turn_allow_guests: true
@@ -131,10 +107,10 @@ Update the `coturn\turnserver.config` file:
     enable_registration_without_verification: true
     ```
 
-1. Check you configuration:
-    1. Element UI: <https://e.example.com/_matrix>
-    1. Matrix Core Endpoint: <https://m.example.com/_matrix>
-    1. Admin WebUI: <https://m.example.com>
+1. Check your configuration:
+    1. Element UI: <http://localhost:8080>
+    1. Matrix Core Endpoint: <http://localhost:8008/_matrix>
+    1. Admin WebUI: <http://localhost:8081>
 
 1. Thats it, all done. you can create users with the admin web ui and download the client App from:
 
