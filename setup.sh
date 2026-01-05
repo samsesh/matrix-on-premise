@@ -280,7 +280,7 @@ cat > element-config.json << EOF
             "base_url": "https://vector.im"
         }
     },
-    "brand": "Samsesh Chat",
+    "brand": "SamSesh Chat",
     "disable_custom_urls": false,
     "disable_guests": true,
     "disable_login_language_selector": false,
