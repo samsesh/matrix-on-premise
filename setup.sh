@@ -160,6 +160,16 @@ echo ""
 read -p "Enter timezone [default: UTC]: " TIMEZONE
 TIMEZONE=${TIMEZONE:-UTC}
 
+# Validate timezone
+if [ "$TIMEZONE" != "UTC" ]; then
+    # Check if timezone exists in system
+    if [ ! -f "/usr/share/zoneinfo/$TIMEZONE" ] && [ ! -d "/usr/share/zoneinfo/$TIMEZONE" ]; then
+        print_warning "Timezone '$TIMEZONE' not found in system. Using UTC instead."
+        print_info "Examples: America/New_York, Europe/London, Asia/Tokyo"
+        TIMEZONE="UTC"
+    fi
+fi
+
 echo ""
 print_info "=== Video Conferencing Configuration ==="
 echo ""
@@ -360,10 +370,28 @@ cat > element-config.json << EOF
         "https://scalar-staging.vector.im/_matrix/integrations/v1",
         "https://scalar-staging.vector.im/api",
         "https://scalar-staging.riot.im/scalar/api"
-    ],
+    ]
+EOF
+
+# Add Jitsi configuration based on choice
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    cat >> element-config.json << EOF
+    ,
     "jitsi": {
-        "preferred_domain": "$([ "$USE_ELEMENT_CALL" = "yes" ] && echo "meet.element.io" || echo "$JITSI_DOMAIN")"
-    },
+        "preferred_domain": "meet.element.io"
+    }
+EOF
+else
+    cat >> element-config.json << EOF
+    ,
+    "jitsi": {
+        "preferred_domain": "$JITSI_DOMAIN"
+    }
+EOF
+fi
+
+cat >> element-config.json << EOF
+    ,
     "permalink_prefix": "https://samsesh.com",
     "help_url": "https://blog.samsesh.com",
     "bug_report_endpoint_url": "https://github.com/samsesh/matrix-on-premise/issues/new",
