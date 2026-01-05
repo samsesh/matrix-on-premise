@@ -1,5 +1,5 @@
 # Synapse Configuration for MatrixRTC with LiveKit
-# 
+#
 # Add these configurations to your synapse/homeserver.yaml file
 # after running the setup to enable Element Call with LiveKit support
 
@@ -23,8 +23,9 @@ rc_message:
   burst_count: 30
 
 # Rate limiting for delayed event management
-# This needs to match at least the heart-beat frequency plus a bit of headroom
-# Currently the heart-beat is every 5 seconds which translates into a rate of 0.2s
+# This needs to match at least the heart-beat frequency plus a bit
+# of headroom. Currently the heart-beat is every 5 seconds which
+# translates into a rate of 0.2s
 rc_delayed_event_mgmt:
   per_second: 1
   burst_count: 20

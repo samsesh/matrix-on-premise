@@ -296,7 +296,13 @@ Make sure these ports are accessible from your clients, or configure a reverse p
    LIVEKIT_SECRET=your-secure-secret
    ```
 
-3. Restart the services:
+3. Update the `livekit.yaml` file with the same credentials:
+   ```yaml
+   keys:
+     your-secure-key: your-secure-secret
+   ```
+
+4. Restart the services:
    ```bash
    docker compose down
    docker compose up -d

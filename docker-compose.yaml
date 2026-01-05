@@ -85,8 +85,6 @@ services:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
-    environment:
-      - LIVEKIT_KEYS=${LIVEKIT_KEY:-devkey}: ${LIVEKIT_SECRET:-secret}
     networks:
       - matrix-network
 

@@ -11,7 +11,7 @@ rtc:
   port_range_end: 60000
   # Use mDNS for local network discovery (set to false for production)
   use_external_ip: true
-  
+
 # UDP port for ICE/STUN
 udp_port: 7882
 
