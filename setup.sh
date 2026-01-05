@@ -47,11 +47,19 @@ validate_domain() {
 # Function to validate IP address
 validate_ip() {
     local ip=$1
-    if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        return 0
-    else
+    # Check basic format
+    if [[ ! $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         return 1
     fi
+    # Validate each octet is 0-255
+    local IFS='.'
+    local -a octets=($ip)
+    for octet in "${octets[@]}"; do
+        if ((octet > 255)); then
+            return 1
+        fi
+    done
+    return 0
 }
 
 # Function to generate random password
@@ -167,6 +175,15 @@ echo ""
 
 # Step 1: Configure Coturn
 print_info "Step 1/6: Configuring Coturn..."
+if [ -f "coturn/turnserver.conf" ]; then
+    print_warning "Existing Coturn configuration found."
+    read -p "Backup existing config? (yes/no) [yes]: " BACKUP_COTURN
+    BACKUP_COTURN=${BACKUP_COTURN:-yes}
+    if [ "$BACKUP_COTURN" = "yes" ] || [ "$BACKUP_COTURN" = "y" ]; then
+        cp coturn/turnserver.conf "coturn/turnserver.conf.backup.$(date +%Y%m%d_%H%M%S)"
+        print_success "Backup created"
+    fi
+fi
 cat > coturn/turnserver.conf << EOF
 use-auth-secret
 static-auth-secret=$COTURN_SECRET
@@ -185,12 +202,19 @@ print_success "Coturn configuration created"
 # Step 2: Download Samsesh logo
 print_info "Step 2/6: Downloading Samsesh Chat logo..."
 mkdir -p element-theme
+LOGO_URL="https://raw.githubusercontent.com/samsesh/samsesh/main/Logo/samseshlogo.png"
 if command_exists curl; then
-    curl -sL https://raw.githubusercontent.com/samsesh/samsesh/main/Logo/samseshlogo.png -o element-theme/logo.png
-    print_success "Logo downloaded successfully"
+    if curl -sL "$LOGO_URL" -o element-theme/logo.png; then
+        print_success "Logo downloaded successfully"
+    else
+        print_warning "Failed to download logo. You can add it manually later to element-theme/logo.png"
+    fi
 elif command_exists wget; then
-    wget -q https://raw.githubusercontent.com/samsesh/samsesh/main/Logo/samseshlogo.png -O element-theme/logo.png
-    print_success "Logo downloaded successfully"
+    if wget -q "$LOGO_URL" -O element-theme/logo.png; then
+        print_success "Logo downloaded successfully"
+    else
+        print_warning "Failed to download logo. You can add it manually later to element-theme/logo.png"
+    fi
 else
     print_warning "Neither curl nor wget found. Skipping logo download."
 fi
@@ -253,6 +277,15 @@ print_success "Element configuration created"
 
 # Step 4: Update docker-compose.yml with custom ports
 print_info "Step 4/6: Updating docker-compose.yml..."
+if [ -f "docker-compose.yaml" ]; then
+    print_warning "Existing docker-compose.yaml found."
+    read -p "Backup existing config? (yes/no) [yes]: " BACKUP_COMPOSE
+    BACKUP_COMPOSE=${BACKUP_COMPOSE:-yes}
+    if [ "$BACKUP_COMPOSE" = "yes" ] || [ "$BACKUP_COMPOSE" = "y" ]; then
+        cp docker-compose.yaml "docker-compose.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+        print_success "Backup created"
+    fi
+fi
 cat > docker-compose.yaml << EOF
 version: '3'
 services:
@@ -371,9 +404,10 @@ echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
 echo ""
 echo "Admin Credentials:"
 echo "  • Username: $ADMIN_USERNAME"
-echo "  • Password: [saved in your terminal history]"
+echo "  • Password: [hidden for security - you entered it during setup]"
 echo ""
 print_info "Important: Save your Coturn secret: $COTURN_SECRET"
+print_warning "Clear your terminal history to remove password traces: history -c"
 echo ""
 
 # Save configuration to file
@@ -389,7 +423,10 @@ ADMIN_USERNAME=$ADMIN_USERNAME
 SETUP_DATE=$(date)
 EOF
 
-print_success "Configuration saved to .setup-config"
+# Secure the configuration file
+chmod 600 .setup-config
+
+print_success "Configuration saved to .setup-config (permissions set to 600)"
 echo ""
 print_info "To view logs: docker compose logs -f"
 print_info "To stop services: docker compose down"
