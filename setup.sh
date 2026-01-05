@@ -134,13 +134,24 @@ while [ -z "$ADMIN_USERNAME" ]; do
     read -p "Enter admin username: " ADMIN_USERNAME
 done
 
-read -sp "Enter admin password: " ADMIN_PASSWORD
+read -sp "Enter admin password (min 8 characters): " ADMIN_PASSWORD
 echo ""
-while [ -z "$ADMIN_PASSWORD" ]; do
-    print_error "Password cannot be empty."
-    read -sp "Enter admin password: " ADMIN_PASSWORD
+while [ -z "$ADMIN_PASSWORD" ] || [ ${#ADMIN_PASSWORD} -lt 8 ]; do
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        print_error "Password cannot be empty."
+    else
+        print_error "Password must be at least 8 characters long."
+    fi
+    read -sp "Enter admin password (min 8 characters): " ADMIN_PASSWORD
     echo ""
 done
+
+echo ""
+print_info "=== Security Configuration ==="
+echo ""
+
+read -p "Enable open user registration? (yes/no) [default: no]: " ENABLE_REGISTRATION
+ENABLE_REGISTRATION=${ENABLE_REGISTRATION:-no}
 
 echo ""
 print_info "=== Port Configuration ==="
@@ -389,10 +400,27 @@ turn_shared_secret: "$COTURN_SECRET"
 turn_user_lifetime: 1h
 turn_allow_guests: true
 
+EOF
+
+    # Add registration settings based on user choice
+    if [ "$ENABLE_REGISTRATION" = "yes" ] || [ "$ENABLE_REGISTRATION" = "y" ]; then
+        cat >> synapse/homeserver.yaml << EOF
 # Enable registration
 enable_registration: true
 enable_registration_without_verification: true
 
+EOF
+        print_warning "Open registration enabled - users can register without verification"
+    else
+        cat >> synapse/homeserver.yaml << EOF
+# Disable open registration (recommended for security)
+enable_registration: false
+
+EOF
+        print_success "Open registration disabled - only admins can create accounts"
+    fi
+    
+    cat >> synapse/homeserver.yaml << EOF
 # Enable user directory search
 user_directory:
     enabled: true
