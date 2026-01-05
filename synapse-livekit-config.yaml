@@ -1,0 +1,47 @@
+# Synapse Configuration for MatrixRTC with LiveKit
+# 
+# Add these configurations to your synapse/homeserver.yaml file
+# after running the setup to enable Element Call with LiveKit support
+
+# Enable experimental MSCs required for Element Call
+experimental_features:
+  # MSC3266: Room summary API. Used for knocking over federation
+  msc3266_enabled: true
+  # MSC4222 needed for syncv2 state_after. This allows clients to
+  # correctly track the state of the room.
+  msc4222_enabled: true
+
+# The maximum allowed duration by which sent events can be delayed, as
+# per MSC4140. Required for proper call participation signalling.
+max_event_delay_duration: 24h
+
+# Rate limiting for message events
+# This needs to match at least e2ee key sharing frequency plus a bit of headroom
+# Note: key sharing events are bursty
+rc_message:
+  per_second: 0.5
+  burst_count: 30
+
+# Rate limiting for delayed event management
+# This needs to match at least the heart-beat frequency plus a bit of headroom
+# Currently the heart-beat is every 5 seconds which translates into a rate of 0.2s
+rc_delayed_event_mgmt:
+  per_second: 1
+  burst_count: 20
+
+# Well-known client configuration
+# This should be added to your .well-known/matrix/client file
+# or configured via your reverse proxy
+#
+# Example content for .well-known/matrix/client:
+# {
+#   "m.homeserver": {
+#     "base_url": "https://matrix.example.com"
+#   },
+#   "org.matrix.msc4143.rtc_foci": [
+#     {
+#       "type": "livekit",
+#       "livekit_service_url": "https://matrix-rtc.example.com/livekit/jwt"
+#     }
+#   ]
+# }

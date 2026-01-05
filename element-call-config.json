@@ -4,5 +4,11 @@
       "base_url": "http://localhost:8008",
       "server_name": "localhost"
     }
-  }
+  },
+  "org.matrix.msc4143.rtc_foci": [
+    {
+      "type": "livekit",
+      "livekit_service_url": "http://localhost:8083"
+    }
+  ]
 }

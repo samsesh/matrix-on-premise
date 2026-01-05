@@ -1,0 +1,46 @@
+# LiveKit Server Configuration
+# For MatrixRTC with Element Call
+
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+
+rtc:
+  # Port range for WebRTC traffic
+  port_range_start: 50000
+  port_range_end: 60000
+  # Use mDNS for local network discovery (set to false for production)
+  use_external_ip: true
+  
+# UDP port for ICE/STUN
+udp_port: 7882
+
+# TCP fallback port for clients that can't use UDP
+tcp_port: 7881
+
+# Disable automatic room creation - required for MatrixRTC Authorization Service
+room:
+  auto_create: false
+  # Rooms will be created by lk-jwt-service when authorized users join
+
+# Logging configuration
+logging:
+  level: info
+  # Set to debug for troubleshooting
+  # level: debug
+
+# Keys for API access (should match lk-jwt-service configuration)
+keys:
+  devkey: secret
+
+# TURN servers for connectivity (optional, uses coturn from docker-compose)
+# This helps clients behind restrictive NATs
+turn:
+  enabled: false
+  # Uncomment and configure if you want LiveKit to use the coturn server
+  # servers:
+  #   - host: coturn
+  #     port: 3478
+  #     protocol: udp
+  #     username: ""
+  #     credential: ""
