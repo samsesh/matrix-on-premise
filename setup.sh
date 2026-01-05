@@ -159,7 +159,7 @@ echo "Element Port:     $ELEMENT_PORT"
 echo "Synapse Port:     $SYNAPSE_PORT"
 echo "Federation Port:  $FEDERATION_PORT"
 echo "Admin Panel Port: $ADMIN_PORT"
-echo "Coturn Secret:    $COTURN_SECRET"
+echo "Coturn Secret:    [generated - will be saved securely]"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -197,7 +197,8 @@ allow-loopback-peers
 cli-password=$COTURN_SECRET
 external-ip=$SERVER_IP
 EOF
-print_success "Coturn configuration created"
+chmod 600 coturn/turnserver.conf
+print_success "Coturn configuration created (permissions set to 600)"
 
 # Step 2: Download Samsesh logo
 print_info "Step 2/6: Downloading Samsesh Chat logo..."
@@ -331,7 +332,7 @@ print_info "Step 5/6: Generating Synapse configuration..."
 if [ -d "synapse" ] && [ "$(ls -A synapse)" ]; then
     print_warning "Synapse data directory already exists. Skipping generation."
 else
-    docker run -it --rm \
+    docker run -i --rm \
         -v "$(pwd)/synapse:/data" \
         -e SYNAPSE_SERVER_NAME="$MATRIX_DOMAIN" \
         -e SYNAPSE_REPORT_STATS=yes \
@@ -383,12 +384,17 @@ sleep 30
 # Create admin user
 print_info "Creating admin user..."
 echo "Creating admin user: $ADMIN_USERNAME"
-docker compose exec -T synapse register_new_matrix_user \
+# Use stdin to pass password securely instead of command-line argument
+echo "$ADMIN_PASSWORD" | docker compose exec -T synapse register_new_matrix_user \
     -c /data/homeserver.yaml \
     -u "$ADMIN_USERNAME" \
-    -p "$ADMIN_PASSWORD" \
+    --password-file /dev/stdin \
     -a \
-    http://localhost:8008 || print_warning "Admin user may already exist or service not ready yet. You can create it manually later."
+    http://localhost:8008 2>/dev/null || {
+    # Fallback to interactive method if password-file not supported
+    docker compose exec -T synapse bash -c "register_new_matrix_user -c /data/homeserver.yaml -u $ADMIN_USERNAME -p $ADMIN_PASSWORD -a http://localhost:8008" 2>/dev/null || \
+    print_warning "Admin user creation failed. You can create it manually later with: docker compose exec synapse register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008"
+}
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
@@ -406,7 +412,7 @@ echo "Admin Credentials:"
 echo "  • Username: $ADMIN_USERNAME"
 echo "  • Password: [hidden for security - you entered it during setup]"
 echo ""
-print_info "Important: Save your Coturn secret: $COTURN_SECRET"
+print_info "Sensitive configuration saved to .setup-config (secured with chmod 600)"
 print_warning "Clear your terminal history to remove password traces: history -c"
 echo ""
 
