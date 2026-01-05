@@ -42,6 +42,36 @@ The script will guide you through:
 - Port configuration
 - Automatic service deployment
 
+### Environment Variables
+
+The docker-compose setup supports environment variables for easy configuration. Create a `.env` file in the project root or set these variables in your environment:
+
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit with your values
+nano .env
+```
+
+Available environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SYNAPSE_SERVER_NAME` | `localhost` | Your Matrix server name/domain |
+| `SYNAPSE_REPORT_STATS` | `yes` | Whether to report usage statistics to matrix.org |
+| `TZ` | `UTC` | Timezone for the containers |
+| `UID` | `991` | User ID for running Synapse (optional) |
+| `GID` | `991` | Group ID for running Synapse (optional) |
+| `TURN_SERVER` | `localhost` | TURN server hostname/IP for voice/video calls |
+| `TURN_USERNAME` | *(empty)* | TURN server username (if using auth) |
+| `TURN_PASSWORD` | *(empty)* | TURN server password (if using auth) |
+
+**Note:** The docker-compose file now includes:
+- **Service dependencies**: Services start in the correct order (coturn → synapse → element/synapse-admin)
+- **Network isolation**: All services communicate through a dedicated `matrix-network`
+- **Environment-based configuration**: Easy customization without editing docker-compose.yaml
+
 ### Manual Installation
 
 If you prefer manual setup, follow these steps:
@@ -112,11 +142,26 @@ Update the `coturn/turnserver.conf` file:
     turn_allow_guests: true
     ```
 
+1. Configure environment variables (optional but recommended)
+
+    ```bash
+    # Copy the example environment file
+    cp .env.example .env
+    
+    # Edit with your server settings
+    nano .env
+    ```
+
 1. deploy the docker compose
 
     ```bash
     sudo docker-compose up -d
     ```
+    
+    The services will start in the correct order:
+    - First: coturn (TURN server)
+    - Then: synapse (Matrix homeserver)
+    - Finally: element (web client) and synapse-admin (admin panel)
 
 1. Create an Admin User
     1. Access docker shell  
@@ -259,7 +304,12 @@ For production use, consider:
 
 1. This setup uses SQLite which is not production-level. Consider PostgreSQL for production.
 2. Open registration is enabled by default. Disable it after creating necessary accounts.
-3. Services communicate using container names for better portability.
+3. Services communicate using container names within the `matrix-network` for better portability and isolation.
+4. **Service Dependencies**: The docker-compose configuration ensures services start in the correct order:
+   - Coturn starts first (TURN server for voice/video)
+   - Synapse starts after coturn is ready (Matrix homeserver)
+   - Element and synapse-admin start after synapse is ready
+5. **Environment Variables**: Use the `.env` file to customize your deployment without editing docker-compose.yaml
 
 ## Further reading and references
 
