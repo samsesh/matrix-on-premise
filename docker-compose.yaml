@@ -28,9 +28,8 @@ services:
       - GID=${GID:-991}
       - SYNAPSE_SERVER_NAME=${SYNAPSE_SERVER_NAME:-localhost}
       - SYNAPSE_REPORT_STATS=${SYNAPSE_REPORT_STATS:-yes}
-      - SYNAPSE_VOIP_TURN_MAIN_URL=turn:${TURN_SERVER:-localhost}:3478?transport=udp
-      - SYNAPSE_VOIP_TURN_USERNAME=${TURN_USERNAME:-}
-      - SYNAPSE_VOIP_TURN_PASSWORD=${TURN_PASSWORD:-}
+      - SYNAPSE_VOIP_TURN_URIS=["turn:${TURN_SERVER:-localhost}:3478?transport=udp","turn:${TURN_SERVER:-localhost}:3478?transport=tcp","turns:${TURN_SERVER:-localhost}:5349?transport=udp","turns:${TURN_SERVER:-localhost}:5349?transport=tcp"]
+      - SYNAPSE_VOIP_TURN_SHARED_SECRET=${TURN_SHARED_SECRET:-}
     depends_on:
       - coturn
     networks:
@@ -45,7 +44,7 @@ services:
     ports:
       - "8080:80"
     environment:
-      - MATRIX_THEMES=light,dark
+      - MATRIX_THEMES=${MATRIX_THEMES:-light,dark}
     depends_on:
       - synapse
     networks:

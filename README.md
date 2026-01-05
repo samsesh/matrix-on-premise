@@ -64,8 +64,8 @@ Available environment variables:
 | `UID` | `991` | User ID for running Synapse (optional) |
 | `GID` | `991` | Group ID for running Synapse (optional) |
 | `TURN_SERVER` | `localhost` | TURN server hostname/IP for voice/video calls |
-| `TURN_USERNAME` | *(empty)* | TURN server username (if using auth) |
-| `TURN_PASSWORD` | *(empty)* | TURN server password (if using auth) |
+| `TURN_SHARED_SECRET` | *(empty)* | TURN server shared secret for authentication |
+| `MATRIX_THEMES` | `light,dark` | Available themes for Element web client |
 
 **Note:** The docker-compose file now includes:
 - **Service dependencies**: Services start in the correct order (coturn → synapse → element/synapse-admin)
