@@ -189,6 +189,14 @@ while ! validate_port "$ADMIN_PORT"; do
     ADMIN_PORT=${ADMIN_PORT:-8081}
 done
 
+read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
+ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
+while ! validate_port "$ELEMENT_CALL_PORT"; do
+    print_error "Invalid port number (must be 1-65535)."
+    read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
+    ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
+done
+
 echo ""
 print_info "=== Configuration Summary ==="
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -199,6 +207,7 @@ echo "Element Port:     $ELEMENT_PORT"
 echo "Synapse Port:     $SYNAPSE_PORT"
 echo "Federation Port:  $FEDERATION_PORT"
 echo "Admin Panel Port: $ADMIN_PORT"
+echo "Element Call Port: $ELEMENT_CALL_PORT"
 echo "Coturn Secret:    [generated - will be saved securely]"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -316,6 +325,20 @@ cat > element-config.json << EOF
 EOF
 print_success "Element configuration created"
 
+# Create Element Call configuration
+print_info "Creating Element Call configuration..."
+cat > element-call-config.json << EOF
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "$BASE_URL",
+      "server_name": "$MATRIX_DOMAIN"
+    }
+  }
+}
+EOF
+print_success "Element Call configuration created"
+
 # Step 4: Update docker-compose.yml with custom ports
 print_info "Step 4/6: Updating docker-compose.yml..."
 if [ -f "docker-compose.yaml" ]; then
@@ -353,6 +376,14 @@ services:
     restart: unless-stopped
     ports:
       - "$ADMIN_PORT:80"
+
+  element-call:
+    image: ghcr.io/element-hq/element-call:latest
+    restart: unless-stopped
+    ports:
+      - "$ELEMENT_CALL_PORT:80"
+    volumes:
+      - ./element-call-config.json:/app/config.json
 
   coturn:
     image: instrumentisto/coturn:latest
@@ -459,6 +490,7 @@ print_success "Your Samsesh Chat server is now running!"
 echo ""
 echo "Access your services at:"
 echo "  • Element Web:     http://localhost:$ELEMENT_PORT"
+echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT"
 echo "  • Synapse API:     http://localhost:$SYNAPSE_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
 echo ""
@@ -475,6 +507,7 @@ cat > .setup-config << EOF
 SERVER_IP=$SERVER_IP
 MATRIX_DOMAIN=$MATRIX_DOMAIN
 ELEMENT_PORT=$ELEMENT_PORT
+ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
 SYNAPSE_PORT=$SYNAPSE_PORT
 FEDERATION_PORT=$FEDERATION_PORT
 ADMIN_PORT=$ADMIN_PORT
