@@ -69,8 +69,6 @@ services:
       - "8082:80"
     volumes:
       - ./element-call-config.json:/app/config.json
-    environment:
-      - VITE_DEFAULT_HOMESERVER=${SYNAPSE_SERVER_NAME:-localhost}
     depends_on:
       - synapse
     networks:
