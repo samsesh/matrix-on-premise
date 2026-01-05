@@ -1,0 +1,30 @@
+# Generated files
+element-config.json
+.setup-config
+
+# Element theme files (keep directory structure)
+element-theme/*
+!element-theme/README.md
+
+# Synapse data
+synapse/
+
+# Docker volumes
+*.log
+*.pid
+
+# Sensitive data
+*.key
+*.pem
+*.crt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

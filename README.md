@@ -1,23 +1,50 @@
-# How to Self-Host synapse Matrix + Element + Coturn + Admin Web UI (Docker Compose)
+# Samsesh Chat - Self-Hosted Matrix Server
 
-Here we will discuss the easiest way to install a chat platform for personal use cases with Docker Compose on a Linux server. We are not going into detail as I'm assuming the reader is familiar with Linux, Docker, and some basic networking terms. But let me know if you think I should update this doc in advance.
-This doc is the minimal and most straightforward approach that I could get to set up a private chat server with reliable VoIP and Video features. On the other hand, "Synapse Matrix" and "Element" are super powerful and customizable; peek at the official documentation.
+A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and Coturn for voice/video calls. This setup provides an easy-to-deploy, privacy-focused communication solution.
+
+## Features
+
+- 🚀 **One-Command Setup**: Automated installation with interactive script
+- 💬 **Modern UI**: Element Web client with custom Samsesh branding
+- 🎥 **Voice & Video**: Built-in Coturn TURN server for reliable calls
+- 🛠️ **Admin Panel**: Web-based administration interface
+- 🔒 **Privacy First**: Self-hosted with no data collection
+- 📦 **Containerized**: Easy deployment with Docker Compose
+
+## Official Documentation
 
 1. <https://matrix.org/docs/projects/server/synapse>
-1. <https://element.io/solutions/on-premise-collaboration>
-
-## Notes before we dive in
-
-1. This setup is powered by SQLITE which is not production level database server consider using PostgreSQL instead.
-1. This setup is allowing user registration without any verification, but its easy to config a central authentication with LDAP server.
-1. Services communicate using container names instead of IP addresses for better portability.
+2. <https://element.io/solutions/on-premise-collaboration>
 
 ## Requirements
 
-1. A Linux server with a Public IP
-1. Installed docker + docker compose
+1. A Linux server (Ubuntu 20.04+ recommended)
+2. Docker and Docker Compose installed
+3. Public IP address (for external access)
+4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 3478/5349 (TURN)
 
-## Steps
+## Quick Start
+
+### Automated Installation (Recommended)
+
+Run the interactive setup script:
+
+```bash
+git clone https://github.com/samsesh/matrix-on-premise.git
+cd matrix-on-premise
+chmod +x setup.sh
+./setup.sh
+```
+
+The script will guide you through:
+- Server configuration (IP, domain)
+- Admin user creation
+- Port configuration
+- Automatic service deployment
+
+### Manual Installation
+
+If you prefer manual setup, follow these steps:
 
 1. Clone this repo or copy its contents to a directory and drive it into
 
@@ -112,11 +139,122 @@ Update the `coturn/turnserver.conf` file:
     1. Matrix Core Endpoint: <http://localhost:8008/_matrix>
     1. Admin WebUI: <http://localhost:8081>
 
-1. That's it, all done. you can create users with the admin web ui and download the client App from:
+## Accessing Your Server
 
-    1. iOS: <https://apps.apple.com/us/app/element-messenger/id1083446067>  
-    1. Android: <https://play.google.com/store/apps/details?id=im.vector.app&hl=en&gl=US>  
-    1. Android (Cafe Bazar): <https://cafebazaar.ir/app/im.vector.app>  
+After installation, access your services at:
+
+- **Element Web (Chat Interface)**: `http://localhost:8080` or `http://your-server-ip:8080`
+- **Synapse API**: `http://localhost:8008`
+- **Synapse Admin Panel**: `http://localhost:8081`
+
+### Mobile Apps
+
+Download the Element mobile app to connect from anywhere:
+
+1. iOS: <https://apps.apple.com/us/app/element-messenger/id1083446067>  
+2. Android: <https://play.google.com/store/apps/details?id=im.vector.app&hl=en&gl=US>  
+3. Android (Cafe Bazar): <https://cafebazaar.ir/app/im.vector.app>
+
+When connecting from mobile:
+1. Open the Element app
+2. Tap "Sign in"
+3. Tap "Edit" next to the homeserver
+4. Enter your server URL: `http://your-server-ip:8008`
+5. Enter your username and password
+
+## Managing Your Server
+
+### View Logs
+```bash
+docker compose logs -f
+docker compose logs -f synapse  # View only Synapse logs
+```
+
+### Restart Services
+```bash
+docker compose restart
+```
+
+### Stop Services
+```bash
+docker compose down
+```
+
+### Backup Your Data
+```bash
+# Backup Synapse data
+tar -czf synapse-backup-$(date +%Y%m%d).tar.gz synapse/
+
+# Backup Coturn config
+cp coturn/turnserver.conf coturn-backup.conf
+```
+
+## Customization
+
+### Custom Branding
+
+The setup includes Samsesh Chat branding by default. To customize:
+
+1. Edit `element-config.json` and change the `brand` field
+2. Replace logo in `element-theme/logo.png` with your own
+3. Restart Element: `docker compose restart element`
+
+### Enable Additional Features
+
+Edit `synapse/homeserver.yaml` to enable features like:
+- Email notifications
+- SMS verification
+- LDAP authentication
+- PostgreSQL database (recommended for production)
+
+See the [official Synapse documentation](https://matrix-org.github.io/synapse/latest/usage/configuration/config_documentation.html) for all options.
+
+## Troubleshooting
+
+### Services won't start
+```bash
+# Check service status
+docker compose ps
+
+# Check logs for errors
+docker compose logs
+```
+
+### Can't connect to server
+- Ensure firewall allows traffic on required ports
+- Check if services are running: `docker compose ps`
+- Verify your IP address is correct in setup
+
+### Federation not working
+- Ensure port 8448 is open and accessible from the internet
+- Check your DNS records point to the correct IP
+- Verify SSL certificates if using HTTPS
+
+## Security Recommendations
+
+1. **Use HTTPS**: Set up a reverse proxy (nginx/Caddy) with SSL certificates
+2. **Firewall**: Only expose necessary ports
+3. **Regular Updates**: Keep Docker images updated
+4. **Backups**: Regularly backup your data
+5. **Strong Passwords**: Use complex passwords for admin accounts
+6. **Disable Open Registration**: After creating accounts, disable open registration
+
+## Production Deployment
+
+For production use, consider:
+
+1. **PostgreSQL Database**: Replace SQLite with PostgreSQL
+2. **Reverse Proxy**: Use nginx or Caddy for SSL termination
+3. **Monitoring**: Set up monitoring (Prometheus/Grafana)
+4. **Rate Limiting**: Configure rate limits in Synapse
+5. **Email Server**: Configure SMTP for notifications
+6. **Regular Backups**: Automated backup solution
+
+## Notes
+
+1. This setup uses SQLite which is not production-level. Consider PostgreSQL for production.
+2. Open registration is enabled by default. Disable it after creating necessary accounts.
+3. Services communicate using container names for better portability.
 
 ## Further reading and references
 

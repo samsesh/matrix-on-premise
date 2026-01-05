@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./element-config.json:/app/config.json
+      - ./element-theme:/app/themes/samsesh
     ports:
       - "8080:80"
 
