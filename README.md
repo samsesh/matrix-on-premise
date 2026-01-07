@@ -23,7 +23,7 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 1. A Linux server (Ubuntu 20.04+ recommended)
 2. Docker and Docker Compose installed
 3. Public IP address (for external access)
-4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 8083 (lk-jwt-service), 3478/5349 (TURN), 7880-7882 (LiveKit)
+4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 8083 (lk-jwt-service), 3478/5349 (TURN), 7880-7882 (LiveKit), 50000-60000/udp (LiveKit WebRTC)
 
 ## Quick Start
 
@@ -277,9 +277,12 @@ The reverse proxy should route:
 - **7880**: LiveKit WebSocket API
 - **7881**: LiveKit TCP fallback for WebRTC
 - **7882/udp**: LiveKit UDP port for WebRTC media
+- **50000-60000/udp**: LiveKit WebRTC media port range (required for call connectivity)
 - **8083**: lk-jwt-service HTTP API
 
 Make sure these ports are accessible from your clients, or configure a reverse proxy.
+
+**Note**: The UDP port range 50000-60000 is essential for WebRTC media traffic. If you're running in a restrictive environment (like Synology Container Manager), ensure this port range is properly mapped.
 
 ### Security Considerations
 
@@ -333,7 +336,7 @@ After starting the services, verify LiveKit is working:
 ### Troubleshooting LiveKit
 
 - **Services won't start**: Check logs with `docker compose logs livekit lk-jwt-service`
-- **Calls don't connect**: Ensure ports 7880-7882 are accessible and LIVEKIT_KEY/SECRET match in all services
+- **Calls don't connect**: Ensure ports 7880-7882 and 50000-60000/udp are accessible and LIVEKIT_KEY/SECRET match in all services
 - **Element Call not using LiveKit**: Verify `element-call-config.json` has the correct `livekit_service_url`
 
 ## Managing Your Server
