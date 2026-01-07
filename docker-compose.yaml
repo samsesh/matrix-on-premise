@@ -71,6 +71,35 @@ services:
       - ./element-call-config.json:/app/config.json
     depends_on:
       - synapse
+      - lk-jwt-service
+    networks:
+      - matrix-network
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    networks:
+      - matrix-network
+
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    restart: unless-stopped
+    ports:
+      - "8083:8080"
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_KEY=${LIVEKIT_KEY:-devkey}
+      - LIVEKIT_SECRET=${LIVEKIT_SECRET:-secret}
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=${SYNAPSE_SERVER_NAME:-localhost}
+    depends_on:
+      - livekit
     networks:
       - matrix-network
 

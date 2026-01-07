@@ -76,6 +76,10 @@ generate_password() {
     openssl rand -base64 32 | tr -d "=+/" | cut -c1-25
 }
 
+# Constants
+LIVEKIT_JWT_PORT=8083
+LIVEKIT_SFU_PORT=7880
+
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║   Matrix On-Premise Setup - Samsesh Chat                  ║"
@@ -123,6 +127,11 @@ fi
 print_info "Generating secure passwords..."
 COTURN_SECRET=$(generate_password)
 print_success "Coturn secret generated"
+
+# Generate LiveKit credentials
+LIVEKIT_KEY=$(openssl rand -hex 32)
+LIVEKIT_SECRET=$(openssl rand -hex 32)
+print_success "LiveKit credentials generated"
 
 echo ""
 print_info "=== Admin User Configuration ==="
@@ -416,6 +425,17 @@ print_success "Element configuration created"
 # Create Element Call configuration (only if Element Call is chosen)
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     print_info "Creating Element Call configuration..."
+    
+    # Define LiveKit JWT service port
+    LIVEKIT_JWT_PORT=8083
+    
+    # Determine the lk-jwt-service URL
+    if [ "$MATRIX_DOMAIN" = "localhost" ]; then
+        LIVEKIT_JWT_URL="http://$SERVER_IP:$LIVEKIT_JWT_PORT"
+    else
+        LIVEKIT_JWT_URL="http://$MATRIX_DOMAIN:$LIVEKIT_JWT_PORT"
+    fi
+    
     cat > element-call-config.json << EOF
 {
   "default_server_config": {
@@ -423,10 +443,25 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       "base_url": "$BASE_URL",
       "server_name": "$MATRIX_DOMAIN"
     }
-  }
+  },
+  "org.matrix.msc4143.rtc_foci": [
+    {
+      "type": "livekit",
+      "livekit_service_url": "$LIVEKIT_JWT_URL"
+    }
+  ]
 }
 EOF
-    print_success "Element Call configuration created"
+    print_success "Element Call configuration created with LiveKit support"
+    
+    # Update livekit.yaml with generated credentials using a more robust method
+    print_info "Configuring LiveKit with secure credentials..."
+    # Create a temporary file with the updated keys section
+    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" '
+        /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
+        { print }
+    ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
+    print_success "LiveKit configuration updated"
 fi
 
 # Step 4: Update docker-compose.yml with custom ports
@@ -555,9 +590,65 @@ EOF
 user_directory:
     enabled: true
     search_all_users: true
+
+# MatrixRTC configuration for Element Call with LiveKit
+experimental_features:
+    # MSC3266: Room summary API. Used for knocking over federation
+    msc3266_enabled: true
+    # MSC4222 needed for syncv2 state_after. This allows clients to
+    # correctly track the state of the room.
+    msc4222_enabled: true
+
+# The maximum allowed duration by which sent events can be delayed, as
+# per MSC4140. Required for proper call participation signalling.
+max_event_delay_duration: 24h
+
+# Rate limiting for message events
+# This needs to match at least e2ee key sharing frequency plus a bit of headroom
+# Note: key sharing events are bursty
+rc_message:
+    per_second: 0.5
+    burst_count: 30
+
+# Rate limiting for delayed event management
+# This needs to match at least the heart-beat frequency plus a bit of headroom
+# Currently the heart-beat is every 5 seconds which translates into a rate of 0.2s
+rc_delayed_event_mgmt:
+    per_second: 1
+    burst_count: 20
 EOF
-    print_success "TURN server configured in homeserver.yaml"
+    print_success "TURN server and MatrixRTC configured in homeserver.yaml"
 fi
+
+# Create .env file with configuration
+print_info "Creating .env file with configuration..."
+cat > .env << EOF
+# Synapse Configuration
+SYNAPSE_SERVER_NAME=$MATRIX_DOMAIN
+SYNAPSE_REPORT_STATS=yes
+
+# System Configuration
+TZ=$TIMEZONE
+
+# User and Group IDs (optional, defaults to 991)
+UID=991
+GID=991
+
+# TURN Server Configuration
+TURN_SERVER=$MATRIX_DOMAIN
+TURN_SHARED_SECRET=$COTURN_SECRET
+
+# Element Web Configuration
+MATRIX_THEMES=light,dark
+
+# Element Call Configuration
+ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
+
+# LiveKit Configuration (for MatrixRTC backend)
+LIVEKIT_KEY=$LIVEKIT_KEY
+LIVEKIT_SECRET=$LIVEKIT_SECRET
+EOF
+print_success ".env file created with secure credentials"
 
 # Step 6: Start services
 print_info "Step 6/6: Starting Docker services..."
@@ -590,7 +681,9 @@ echo ""
 echo "Access your services at:"
 echo "  • Element Web:     http://localhost:$ELEMENT_PORT"
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
-    echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT"
+    echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT (with LiveKit backend)"
+    echo "  • LiveKit SFU:     ws://localhost:$LIVEKIT_SFU_PORT"
+    echo "  • lk-jwt-service:  http://localhost:$LIVEKIT_JWT_PORT"
 fi
 echo "  • Synapse API:     http://localhost:$SYNAPSE_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
@@ -627,6 +720,8 @@ SYNAPSE_PORT=$SYNAPSE_PORT
 FEDERATION_PORT=$FEDERATION_PORT
 ADMIN_PORT=$ADMIN_PORT
 COTURN_SECRET=$COTURN_SECRET
+LIVEKIT_KEY=$LIVEKIT_KEY
+LIVEKIT_SECRET=$LIVEKIT_SECRET
 ADMIN_USERNAME=$ADMIN_USERNAME
 SETUP_DATE=$(date)
 EOF

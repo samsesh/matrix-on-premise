@@ -7,7 +7,8 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 - 🚀 **One-Command Setup**: Automated installation with interactive script
 - 💬 **Modern UI**: Element Web client with custom Samsesh branding
 - 🎥 **Voice & Video**: Built-in Coturn TURN server for reliable calls
-- 📞 **Element Call**: Standalone video conferencing for group calls
+- 📞 **Element Call**: Standalone video conferencing with LiveKit backend
+- 🎬 **LiveKit Integration**: Professional-grade SFU for scalable video calls
 - 🛠️ **Admin Panel**: Web-based administration interface
 - 🔒 **Privacy First**: Self-hosted with no data collection
 - 📦 **Containerized**: Easy deployment with Docker Compose
@@ -22,7 +23,7 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 1. A Linux server (Ubuntu 20.04+ recommended)
 2. Docker and Docker Compose installed
 3. Public IP address (for external access)
-4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 3478/5349 (TURN)
+4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 8083 (lk-jwt-service), 3478/5349 (TURN), 7880-7882 (LiveKit)
 
 ## Quick Start
 
@@ -70,6 +71,8 @@ Available environment variables:
 | `TURN_SHARED_SECRET` | *(empty)* | TURN server shared secret for authentication |
 | `MATRIX_THEMES` | `light,dark` | Available themes for Element web client |
 | `ELEMENT_CALL_PORT` | `8082` | Port for Element Call video conferencing service |
+| `LIVEKIT_KEY` | `devkey` | LiveKit API key for MatrixRTC (change in production!) |
+| `LIVEKIT_SECRET` | `secret` | LiveKit API secret for MatrixRTC (change in production!) |
 
 **Note:** The docker-compose file now includes:
 - **Service dependencies**: Services start in the correct order (coturn → synapse → element/element-call/synapse-admin)
@@ -197,6 +200,8 @@ After installation, access your services at:
 - **Element Call (Video Conferencing)**: `http://localhost:8082` or `http://your-server-ip:8082`
 - **Synapse API**: `http://localhost:8008`
 - **Synapse Admin Panel**: `http://localhost:8081`
+- **lk-jwt-service (MatrixRTC Auth)**: `http://localhost:8083`
+- **LiveKit SFU**: `ws://localhost:7880` (WebSocket connection for media)
 
 ### Mobile Apps
 
@@ -212,6 +217,124 @@ When connecting from mobile:
 3. Tap "Edit" next to the homeserver
 4. Enter your server URL: `http://your-server-ip:8008`
 5. Enter your username and password
+
+## LiveKit and MatrixRTC Setup
+
+This setup includes **LiveKit** and the **MatrixRTC Authorization Service** for enhanced video calling capabilities with Element Call. LiveKit provides a scalable SFU (Selective Forwarding Unit) backend that improves call quality and performance.
+
+### What's Included
+
+The docker-compose configuration includes three additional services for MatrixRTC:
+
+1. **LiveKit SFU** (Port 7880): The media routing server for real-time video/audio
+2. **lk-jwt-service** (Port 8083): Authorization service that bridges Matrix authentication with LiveKit
+3. **Element Call**: Configured to use the LiveKit backend
+
+### Required Synapse Configuration
+
+After running the setup, you need to add MatrixRTC configuration to your Synapse homeserver. Edit `synapse/homeserver.yaml` and add the following:
+
+```yaml
+# Enable experimental MSCs required for Element Call
+experimental_features:
+  msc3266_enabled: true  # Room summary API for federation
+  msc4222_enabled: true  # Sync v2 state_after
+
+# Maximum delay for events (required for call signalling)
+max_event_delay_duration: 24h
+
+# Rate limiting for messages (adjust for e2ee key sharing)
+rc_message:
+  per_second: 0.5
+  burst_count: 30
+
+# Rate limiting for delayed events (adjust for heartbeats)
+rc_delayed_event_mgmt:
+  per_second: 1
+  burst_count: 20
+```
+
+A complete configuration template is available in `synapse-livekit-config.yaml`.
+
+After adding this configuration, restart Synapse:
+```bash
+docker compose restart synapse
+```
+
+### Production Deployment with Reverse Proxy
+
+For production use, it's recommended to set up a reverse proxy (nginx or Caddy) to route LiveKit traffic. Example configurations are provided:
+
+- `nginx-livekit-example.conf` - Nginx reverse proxy configuration
+- `caddy-livekit-example.conf` - Caddy reverse proxy configuration
+
+The reverse proxy should route:
+- `/livekit/jwt/` → lk-jwt-service (port 8083)
+- `/livekit/sfu/` → LiveKit SFU (port 7880)
+
+### Ports Used by LiveKit
+
+- **7880**: LiveKit WebSocket API
+- **7881**: LiveKit TCP fallback for WebRTC
+- **7882/udp**: LiveKit UDP port for WebRTC media
+- **8083**: lk-jwt-service HTTP API
+
+Make sure these ports are accessible from your clients, or configure a reverse proxy.
+
+### Security Considerations
+
+**Important:** Change the default LiveKit credentials in production!
+
+1. Generate secure random values:
+   ```bash
+   openssl rand -hex 32  # For LIVEKIT_SECRET
+   ```
+
+2. Update your `.env` file:
+   ```bash
+   LIVEKIT_KEY=your-secure-key
+   LIVEKIT_SECRET=your-secure-secret
+   ```
+
+3. Update the `livekit.yaml` file with the same credentials:
+   ```yaml
+   keys:
+     your-secure-key: your-secure-secret
+   ```
+
+4. Restart the services:
+   ```bash
+   docker compose down
+   docker compose up -d
+   ```
+
+### Verifying LiveKit Setup
+
+After starting the services, verify LiveKit is working:
+
+1. Check service health:
+   ```bash
+   docker compose ps
+   ```
+   All services should show "Up" status.
+
+2. Check LiveKit logs:
+   ```bash
+   docker compose logs livekit
+   docker compose logs lk-jwt-service
+   ```
+
+3. Test the JWT service endpoint:
+   ```bash
+   curl http://localhost:8083/healthz
+   ```
+   Should return a 200 OK response.
+
+### Troubleshooting LiveKit
+
+- **Services won't start**: Check logs with `docker compose logs livekit lk-jwt-service`
+- **Calls don't connect**: Ensure ports 7880-7882 are accessible and LIVEKIT_KEY/SECRET match in all services
+- **Element Call not using LiveKit**: Verify `element-call-config.json` has the correct `livekit_service_url`
 
 ## Managing Your Server
 
@@ -333,14 +456,20 @@ For production use, consider:
 3. Services communicate using container names within the `matrix-network` for better portability and isolation.
 4. **Service Dependencies**: The docker-compose configuration ensures services start in the correct order:
    - Coturn starts first (TURN server for voice/video)
+   - LiveKit starts (MatrixRTC media server)
+   - lk-jwt-service starts after LiveKit (MatrixRTC authorization)
    - Synapse starts after coturn is ready (Matrix homeserver)
-   - Element, Element Call, and synapse-admin start after synapse is ready
+   - Element, Element Call, and synapse-admin start after synapse and lk-jwt-service are ready
 5. **Environment Variables**: Use the `.env` file to customize your deployment without editing docker-compose.yaml
+6. **LiveKit Integration**: Element Call now uses LiveKit as the MatrixRTC backend for improved video call quality and scalability
 
 ## Further reading and references
 
 1. <https://github.com/coturn/coturn>
 1. <https://matrix-org.github.io/synapse/v1.37/turn-howto.html>
+1. <https://github.com/element-hq/lk-jwt-service> - MatrixRTC Authorization Service
+1. <https://github.com/element-hq/element-call/blob/livekit/docs/self-hosting.md> - Element Call with LiveKit
+1. <https://docs.livekit.io/> - LiveKit Documentation
 1. <https://github.com/Miouyouyou/matrix-coturn-docker-setup/blob/master/docker-compose.1.yml>
 1. <https://github.com/coturn/coturn/blob/master/docker/docker-compose-all.yml>
 1. <https://github.com/spantaleev/matrix-docker-ansible-deploy/tree/master/docs>
