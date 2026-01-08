@@ -203,6 +203,45 @@ if [ "$VIDEO_CONF_CHOICE" = "2" ]; then
 else
     USE_ELEMENT_CALL="yes"
     print_info "Will use Element Call for video conferencing"
+    
+    echo ""
+    print_info "=== LiveKit Domain Configuration ==="
+    echo ""
+    echo "LiveKit services can be accessed via domain names or IP addresses."
+    echo "If you have domain names configured, enter them below."
+    echo "For local deployments, you can use localhost or your server's IP."
+    echo ""
+    
+    read -p "Enter LiveKit JWT service domain (e.g., livekit-jwt.example.com) [default: localhost]: " LIVEKIT_JWT_DOMAIN
+    LIVEKIT_JWT_DOMAIN=${LIVEKIT_JWT_DOMAIN:-localhost}
+    
+    if [ "$LIVEKIT_JWT_DOMAIN" != "localhost" ] && [ "$LIVEKIT_JWT_DOMAIN" != "$SERVER_IP" ]; then
+        while ! validate_domain "$LIVEKIT_JWT_DOMAIN"; do
+            print_error "Invalid domain format."
+            read -p "Enter LiveKit JWT service domain [default: localhost]: " LIVEKIT_JWT_DOMAIN
+            LIVEKIT_JWT_DOMAIN=${LIVEKIT_JWT_DOMAIN:-localhost}
+            if [ "$LIVEKIT_JWT_DOMAIN" = "localhost" ] || [ "$LIVEKIT_JWT_DOMAIN" = "$SERVER_IP" ]; then
+                break
+            fi
+        done
+    fi
+    
+    read -p "Enter LiveKit SFU domain (e.g., livekit.example.com) [default: localhost]: " LIVEKIT_DOMAIN
+    LIVEKIT_DOMAIN=${LIVEKIT_DOMAIN:-localhost}
+    
+    if [ "$LIVEKIT_DOMAIN" != "localhost" ] && [ "$LIVEKIT_DOMAIN" != "$SERVER_IP" ]; then
+        while ! validate_domain "$LIVEKIT_DOMAIN"; do
+            print_error "Invalid domain format."
+            read -p "Enter LiveKit SFU domain [default: localhost]: " LIVEKIT_DOMAIN
+            LIVEKIT_DOMAIN=${LIVEKIT_DOMAIN:-localhost}
+            if [ "$LIVEKIT_DOMAIN" = "localhost" ] || [ "$LIVEKIT_DOMAIN" = "$SERVER_IP" ]; then
+                break
+            fi
+        done
+    fi
+    
+    print_success "LiveKit JWT service will be accessible at: $LIVEKIT_JWT_DOMAIN"
+    print_success "LiveKit SFU will be accessible at: $LIVEKIT_DOMAIN"
 fi
 
 echo ""
@@ -249,6 +288,30 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
         read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
         ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
     done
+    
+    echo ""
+    print_info "LiveKit WebRTC requires a UDP port range for media traffic."
+    read -p "WebRTC port range start [default: 50000]: " WEBRTC_PORT_START
+    WEBRTC_PORT_START=${WEBRTC_PORT_START:-50000}
+    while ! validate_port "$WEBRTC_PORT_START"; do
+        print_error "Invalid port number (must be 1-65535)."
+        read -p "WebRTC port range start [default: 50000]: " WEBRTC_PORT_START
+        WEBRTC_PORT_START=${WEBRTC_PORT_START:-50000}
+    done
+    
+    read -p "WebRTC port range end [default: 60000]: " WEBRTC_PORT_END
+    WEBRTC_PORT_END=${WEBRTC_PORT_END:-60000}
+    while ! validate_port "$WEBRTC_PORT_END" || [ "$WEBRTC_PORT_END" -le "$WEBRTC_PORT_START" ]; do
+        if ! validate_port "$WEBRTC_PORT_END"; then
+            print_error "Invalid port number (must be 1-65535)."
+        else
+            print_error "End port must be greater than start port ($WEBRTC_PORT_START)."
+        fi
+        read -p "WebRTC port range end [default: 60000]: " WEBRTC_PORT_END
+        WEBRTC_PORT_END=${WEBRTC_PORT_END:-60000}
+    done
+    
+    print_success "WebRTC will use UDP ports $WEBRTC_PORT_START-$WEBRTC_PORT_END"
 fi
 
 echo ""
@@ -269,6 +332,8 @@ echo "Federation Port:  $FEDERATION_PORT"
 echo "Admin Panel Port: $ADMIN_PORT"
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     echo "Element Call Port: $ELEMENT_CALL_PORT"
+    echo "LiveKit JWT Domain: $LIVEKIT_JWT_DOMAIN"
+    echo "LiveKit SFU Domain: $LIVEKIT_DOMAIN"
 fi
 echo "Coturn Secret:    [generated - will be saved securely]"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -429,11 +494,16 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     # Define LiveKit JWT service port
     LIVEKIT_JWT_PORT=8083
     
-    # Determine the lk-jwt-service URL
-    if [ "$MATRIX_DOMAIN" = "localhost" ]; then
+    # Determine the lk-jwt-service URL based on user-provided domain
+    if [ "$LIVEKIT_JWT_DOMAIN" = "localhost" ]; then
         LIVEKIT_JWT_URL="http://$SERVER_IP:$LIVEKIT_JWT_PORT"
     else
-        LIVEKIT_JWT_URL="http://$MATRIX_DOMAIN:$LIVEKIT_JWT_PORT"
+        # Check if user wants to use HTTPS for production domains
+        if [[ "$LIVEKIT_JWT_DOMAIN" != "$SERVER_IP" ]]; then
+            LIVEKIT_JWT_URL="https://$LIVEKIT_JWT_DOMAIN"
+        else
+            LIVEKIT_JWT_URL="http://$LIVEKIT_JWT_DOMAIN:$LIVEKIT_JWT_PORT"
+        fi
     fi
     
     cat > element-call-config.json << EOF
@@ -452,16 +522,20 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
   ]
 }
 EOF
-    print_success "Element Call configuration created with LiveKit support"
+    print_success "Element Call configuration created with LiveKit support at $LIVEKIT_JWT_URL"
     
     # Update livekit.yaml with generated credentials using a more robust method
-    print_info "Configuring LiveKit with secure credentials..."
-    # Create a temporary file with the updated keys section
-    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" '
+    print_info "Configuring LiveKit with secure credentials and port range..."
+    # Create a temporary file with the updated keys section, port range, and Docker-optimized settings
+    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" -v port_start="$WEBRTC_PORT_START" -v port_end="$WEBRTC_PORT_END" '
         /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
+        /^[[:space:]]*port_range_start:/ { printf "  port_range_start: %s\n", port_start; next }
+        /^[[:space:]]*port_range_end:/ { printf "  port_range_end: %s\n", port_end; next }
+        /^[[:space:]]*use_external_ip:/ { printf "  use_external_ip: false\n"; next }
+        /^[[:space:]]*use_ice_lite:/ { printf "  use_ice_lite: true\n"; next }
         { print }
     ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
-    print_success "LiveKit configuration updated"
+    print_success "LiveKit configuration updated with ports $WEBRTC_PORT_START-$WEBRTC_PORT_END and Docker-optimized settings"
 fi
 
 # Step 4: Update docker-compose.yml with custom ports
@@ -489,6 +563,12 @@ services:
       - "3478:3478/udp"
       - "5349:5349"
       - "5349:5349/udp"
+    healthcheck:
+      test: ["CMD", "nc", "-zu", "127.0.0.1", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - matrix-network
 
@@ -508,8 +588,15 @@ services:
       - SYNAPSE_REPORT_STATS=\${SYNAPSE_REPORT_STATS:-yes}
       - SYNAPSE_VOIP_TURN_URIS=["turn:\${TURN_SERVER:-localhost}:3478?transport=udp","turn:\${TURN_SERVER:-localhost}:3478?transport=tcp","turns:\${TURN_SERVER:-localhost}:5349?transport=udp","turns:\${TURN_SERVER:-localhost}:5349?transport=tcp"]
       - SYNAPSE_VOIP_TURN_SHARED_SECRET=\${TURN_SHARED_SECRET:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fSs", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
-      - coturn
+      coturn:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -523,8 +610,15 @@ services:
       - "$ELEMENT_PORT:80"
     environment:
       - MATRIX_THEMES=\${MATRIX_THEMES:-light,dark}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -535,8 +629,15 @@ services:
       - "$ADMIN_PORT:80"
     environment:
       - REACT_APP_SERVER=http://synapse:8008
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_started
     networks:
       - matrix-network
 EOF
@@ -545,6 +646,34 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> docker-compose.yaml << EOF
 
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    restart: unless-stopped
+    ports:
+      - "$LIVEKIT_JWT_PORT:8080"
+    environment:
+      # For Docker-internal communication (default for local deployments)
+      - LIVEKIT_URL=ws://livekit:7880
+      # For production with SSL/TLS and reverse proxy, change to:
+      # - LIVEKIT_URL=wss://matrixrtc.yourdomain.com
+      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
+      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
+      # Restrict call creation to users from specific homeservers (comma-separated)
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      synapse:
+        condition: service_started
+      livekit:
+        condition: service_started
+    networks:
+      - matrix-network
+
   element-call:
     image: ghcr.io/element-hq/element-call:latest
     restart: unless-stopped
@@ -552,9 +681,17 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "$ELEMENT_CALL_PORT:8080"
     volumes:
       - ./element-call-config.json:/app/config.json
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      - synapse
-      - lk-jwt-service
+      synapse:
+        condition: service_started
+      lk-jwt-service:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -569,22 +706,13 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "7881:7881"
       - "7882:7882/udp"
       # WebRTC port range for media traffic
-      - "50000-60000:50000-60000/udp"
-    networks:
-      - matrix-network
-
-  lk-jwt-service:
-    image: ghcr.io/element-hq/lk-jwt-service:latest
-    restart: unless-stopped
-    ports:
-      - "$LIVEKIT_JWT_PORT:8080"
-    environment:
-      - LIVEKIT_URL=ws://livekit:7880
-      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
-      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
-      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
-    depends_on:
-      - livekit
+      - "$WEBRTC_PORT_START-$WEBRTC_PORT_END:$WEBRTC_PORT_START-$WEBRTC_PORT_END/udp"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - matrix-network
 EOF
@@ -714,6 +842,10 @@ ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
 # LiveKit Configuration (for MatrixRTC backend)
 LIVEKIT_KEY=$LIVEKIT_KEY
 LIVEKIT_SECRET=$LIVEKIT_SECRET
+LIVEKIT_DOMAIN=$LIVEKIT_DOMAIN
+LIVEKIT_JWT_DOMAIN=$LIVEKIT_JWT_DOMAIN
+WEBRTC_PORT_START=$WEBRTC_PORT_START
+WEBRTC_PORT_END=$WEBRTC_PORT_END
 EOF
 print_success ".env file created with secure credentials"
 
@@ -775,6 +907,10 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> .setup-config << EOF
 ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
+LIVEKIT_DOMAIN=$LIVEKIT_DOMAIN
+LIVEKIT_JWT_DOMAIN=$LIVEKIT_JWT_DOMAIN
+WEBRTC_PORT_START=$WEBRTC_PORT_START
+WEBRTC_PORT_END=$WEBRTC_PORT_END
 EOF
 else
     cat >> .setup-config << EOF
