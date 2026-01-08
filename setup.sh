@@ -529,8 +529,8 @@ EOF
     # Create a temporary file with the updated keys section and port range
     awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" -v port_start="$WEBRTC_PORT_START" -v port_end="$WEBRTC_PORT_END" '
         /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
-        /^  port_range_start:/ { printf "  port_range_start: %s\n", port_start; next }
-        /^  port_range_end:/ { printf "  port_range_end: %s\n", port_end; next }
+        /^[[:space:]]*port_range_start:/ { printf "  port_range_start: %s\n", port_start; next }
+        /^[[:space:]]*port_range_end:/ { printf "  port_range_end: %s\n", port_end; next }
         { print }
     ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
     print_success "LiveKit configuration updated with ports $WEBRTC_PORT_START-$WEBRTC_PORT_END"
