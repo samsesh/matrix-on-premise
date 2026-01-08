@@ -526,14 +526,16 @@ EOF
     
     # Update livekit.yaml with generated credentials using a more robust method
     print_info "Configuring LiveKit with secure credentials and port range..."
-    # Create a temporary file with the updated keys section and port range
+    # Create a temporary file with the updated keys section, port range, and Docker-optimized settings
     awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" -v port_start="$WEBRTC_PORT_START" -v port_end="$WEBRTC_PORT_END" '
         /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
         /^[[:space:]]*port_range_start:/ { printf "  port_range_start: %s\n", port_start; next }
         /^[[:space:]]*port_range_end:/ { printf "  port_range_end: %s\n", port_end; next }
+        /^[[:space:]]*use_external_ip:/ { printf "  use_external_ip: false\n"; next }
+        /^[[:space:]]*use_ice_lite:/ { printf "  use_ice_lite: true\n"; next }
         { print }
     ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
-    print_success "LiveKit configuration updated with ports $WEBRTC_PORT_START-$WEBRTC_PORT_END"
+    print_success "LiveKit configuration updated with ports $WEBRTC_PORT_START-$WEBRTC_PORT_END and Docker-optimized settings"
 fi
 
 # Step 4: Update docker-compose.yml with custom ports
