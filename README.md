@@ -338,8 +338,56 @@ After starting the services, verify LiveKit is working:
    ```
    Should return a 200 OK response.
 
+### Production Deployment with Domains
+
+For production deployments with domain names and SSL/TLS, you need to configure reverse proxy and proper URLs:
+
+**Important**: The default `LIVEKIT_URL=ws://livekit:7880` is for Docker-internal communication. For production with domains:
+
+1. **Set up reverse proxy** (Caddy, Nginx, Traefik) with SSL/TLS certificates for:
+   - LiveKit SFU: `matrixrtc.yourdomain.com` → `livekit:7880` (WebSocket)
+   - JWT Service: `livekit-jwt.yourdomain.com` → `lk-jwt-service:8080` (HTTP)
+
+2. **Update lk-jwt-service environment** in `docker-compose.yaml`:
+   ```yaml
+   environment:
+     # Use wss:// (WebSocket Secure) for production with SSL/TLS
+     - LIVEKIT_URL=wss://matrixrtc.yourdomain.com
+     - LIVEKIT_KEY=${LIVEKIT_KEY}
+     - LIVEKIT_SECRET=${LIVEKIT_SECRET}
+     # Restrict to your Matrix homeserver domain
+     - LIVEKIT_FULL_ACCESS_HOMESERVERS=yourdomain.com
+   ```
+
+3. **Update `.well-known/matrix/client`** on your Matrix server to include:
+   ```json
+   {
+     "m.homeserver": { "base_url": "https://matrix.yourdomain.com" },
+     "org.matrix.msc3575.proxy": {
+       "url": "https://livekit-jwt.yourdomain.com"
+     }
+   }
+   ```
+
+4. **Configure Element Call** to use your JWT service domain in `element-call-config.json`
+
+5. **Update livekit.yaml** for production:
+   ```yaml
+   rtc:
+     use_external_ip: false
+     node_ip: "YOUR_PUBLIC_IP"  # Your server's public IP
+     use_ice_lite: true
+   ```
+
+**Note**: Element has discontinued their free relay for Matrix RTC. Self-hosting LiveKit is now required for Element Call/Element X video calls.
+
 ### Troubleshooting LiveKit
 
+- **MISSING_MATRIX_RTC_FOCUS error**: 
+  - This means Element Call can't connect to your LiveKit JWT service
+  - Verify `.well-known/matrix/client` includes the `org.matrix.msc3575.proxy` entry
+  - Check that your JWT service domain is accessible: `curl https://livekit-jwt.yourdomain.com/healthz`
+  - Ensure `LIVEKIT_FULL_ACCESS_HOMESERVERS` matches your Matrix server domain
 - **LiveKit hangs on startup**: 
   - This is usually caused by external IP detection in Docker environments
   - Ensure `use_external_ip: false` in `livekit.yaml` for local/internal deployments
@@ -352,13 +400,18 @@ After starting the services, verify LiveKit is working:
   - To change it after setup, update `WEBRTC_PORT_START` and `WEBRTC_PORT_END` in `.env` file
   - Also update the `port_range_start` and `port_range_end` in `livekit.yaml`
   - Then restart: `docker compose down && docker compose up -d`
-- **Calls don't connect**: Ensure ports 7880-7882 and your configured WebRTC port range (UDP) are accessible and LIVEKIT_KEY/SECRET match in all services
+- **Calls don't connect**: 
+  - Ensure ports 7880-7882 and your configured WebRTC port range (UDP) are accessible
+  - Verify LIVEKIT_KEY/SECRET match in all services (.env, docker-compose.yaml, livekit.yaml)
+  - For production, ensure your public IP is correctly set in livekit.yaml
+  - Check firewall rules allow WebRTC UDP traffic on your configured port range
 - **Element Call not using LiveKit**: Verify `element-call-config.json` has the correct `livekit_service_url`
 - **Domain resolution issues**: 
   - Ensure your LiveKit and JWT service domains are correctly configured
   - For local deployments, use `localhost` or your server's IP address
   - For production, ensure DNS records point to your server
   - Update `LIVEKIT_DOMAIN` and `LIVEKIT_JWT_DOMAIN` in `.env` and regenerate `element-call-config.json`
+  - Verify SSL/TLS certificates are valid for your domains
 
 ## Managing Your Server
 

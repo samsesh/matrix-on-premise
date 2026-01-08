@@ -652,9 +652,13 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     ports:
       - "$LIVEKIT_JWT_PORT:8080"
     environment:
+      # For Docker-internal communication (default for local deployments)
       - LIVEKIT_URL=ws://livekit:7880
+      # For production with SSL/TLS and reverse proxy, change to:
+      # - LIVEKIT_URL=wss://matrixrtc.yourdomain.com
       - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
       - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
+      # Restrict call creation to users from specific homeservers (comma-separated)
       - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
