@@ -646,27 +646,6 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> docker-compose.yaml << EOF
 
-  livekit:
-    image: livekit/livekit-server:latest
-    restart: unless-stopped
-    command: --config /etc/livekit.yaml
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
-    ports:
-      - "$LIVEKIT_SFU_PORT:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-      # WebRTC port range for media traffic
-      - "$WEBRTC_PORT_START-$WEBRTC_PORT_END:$WEBRTC_PORT_START-$WEBRTC_PORT_END/udp"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - matrix-network
-
   lk-jwt-service:
     image: ghcr.io/element-hq/lk-jwt-service:latest
     restart: unless-stopped
@@ -709,6 +688,27 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
         condition: service_started
       lk-jwt-service:
         condition: service_started
+    networks:
+      - matrix-network
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    ports:
+      - "$LIVEKIT_SFU_PORT:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      # WebRTC port range for media traffic
+      - "$WEBRTC_PORT_START-$WEBRTC_PORT_END:$WEBRTC_PORT_START-$WEBRTC_PORT_END/udp"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - matrix-network
 EOF
