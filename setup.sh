@@ -478,14 +478,19 @@ fi
 cat > docker-compose.yaml << EOF
 version: '3'
 services:
-  element:
-    image: vectorim/element-web:latest
+  coturn:
+    image: instrumentisto/coturn:latest
     restart: unless-stopped
     volumes:
-      - ./element-config.json:/app/config.json
-      - ./element-theme:/app/themes/samsesh
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
     ports:
-      - "$ELEMENT_PORT:80"
+      - "49160-49200:49160-49200/udp"
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+    networks:
+      - matrix-network
 
   synapse:
     image: matrixdotorg/synapse:latest
@@ -495,15 +500,48 @@ services:
     ports:
       - "$SYNAPSE_PORT:8008"
       - "$FEDERATION_PORT:8448"
+    environment:
+      - TZ=\${TZ:-UTC}
+      - UID=\${UID:-991}
+      - GID=\${GID:-991}
+      - SYNAPSE_SERVER_NAME=\${SYNAPSE_SERVER_NAME:-localhost}
+      - SYNAPSE_REPORT_STATS=\${SYNAPSE_REPORT_STATS:-yes}
+      - SYNAPSE_VOIP_TURN_URIS=["turn:\${TURN_SERVER:-localhost}:3478?transport=udp","turn:\${TURN_SERVER:-localhost}:3478?transport=tcp","turns:\${TURN_SERVER:-localhost}:5349?transport=udp","turns:\${TURN_SERVER:-localhost}:5349?transport=tcp"]
+      - SYNAPSE_VOIP_TURN_SHARED_SECRET=\${TURN_SHARED_SECRET:-}
+    depends_on:
+      - coturn
+    networks:
+      - matrix-network
+
+  element:
+    image: vectorim/element-web:latest
+    restart: unless-stopped
+    volumes:
+      - ./element-config.json:/app/config.json
+      - ./element-theme:/app/themes/samsesh
+    ports:
+      - "$ELEMENT_PORT:80"
+    environment:
+      - MATRIX_THEMES=\${MATRIX_THEMES:-light,dark}
+    depends_on:
+      - synapse
+    networks:
+      - matrix-network
 
   synapse-admin:
     image: awesometechnologies/synapse-admin
     restart: unless-stopped
     ports:
       - "$ADMIN_PORT:80"
+    environment:
+      - REACT_APP_SERVER=http://synapse:8008
+    depends_on:
+      - synapse
+    networks:
+      - matrix-network
 EOF
 
-# Add Element Call service if selected
+# Add Element Call and LiveKit services if selected
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> docker-compose.yaml << EOF
 
@@ -511,24 +549,53 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     image: ghcr.io/element-hq/element-call:latest
     restart: unless-stopped
     ports:
-      - "$ELEMENT_CALL_PORT:80"
+      - "$ELEMENT_CALL_PORT:8080"
     volumes:
       - ./element-call-config.json:/app/config.json
+    depends_on:
+      - synapse
+      - lk-jwt-service
+    networks:
+      - matrix-network
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    ports:
+      - "$LIVEKIT_SFU_PORT:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      # WebRTC port range for media traffic
+      - "50000-60000:50000-60000/udp"
+    networks:
+      - matrix-network
+
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    restart: unless-stopped
+    ports:
+      - "$LIVEKIT_JWT_PORT:8080"
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
+      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
+    depends_on:
+      - livekit
+    networks:
+      - matrix-network
 EOF
 fi
 
 cat >> docker-compose.yaml << EOF
 
-  coturn:
-    image: instrumentisto/coturn:latest
-    restart: unless-stopped
-    volumes:
-      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
-    ports:
-      - "49160-49200:49160-49200/udp"
-      - "3478:3478"
-      - "5349:5349"
-    network_mode: host
+networks:
+  matrix-network:
+    name: matrix-network
+    driver: bridge
 EOF
 print_success "docker-compose.yml updated"
 
