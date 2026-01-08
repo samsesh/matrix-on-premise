@@ -340,6 +340,11 @@ After starting the services, verify LiveKit is working:
 
 ### Troubleshooting LiveKit
 
+- **LiveKit hangs on startup**: 
+  - This is usually caused by external IP detection in Docker environments
+  - Ensure `use_external_ip: false` in `livekit.yaml` for local/internal deployments
+  - For production with public IP, set `use_external_ip: false` and add `node_ip: "YOUR_PUBLIC_IP"` in the `rtc:` section
+  - Restart after changes: `docker compose restart livekit`
 - **Services won't start**: Check logs with `docker compose logs livekit lk-jwt-service`
 - **Port conflict errors (address already in use)**: 
   - The default WebRTC port range (50000-60000) may conflict with other services

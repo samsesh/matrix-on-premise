@@ -10,8 +10,13 @@ rtc:
   port_range_start: 50000
   port_range_end: 60000
   # Use external IP for WebRTC connections
-  # Set to false for local/internal deployments
-  use_external_ip: true
+  # Set to false for local/internal deployments (default)
+  # For production: set to false and configure node_ip below instead
+  use_external_ip: false
+  # For production deployments, uncomment and set your public IP:
+  # node_ip: "YOUR_PUBLIC_IP_HERE"
+  # Use ICE Lite mode for better compatibility in Docker/local networks
+  use_ice_lite: true
 
 # UDP port for ICE/STUN
 udp_port: 7882
