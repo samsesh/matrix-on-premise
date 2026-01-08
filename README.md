@@ -80,7 +80,7 @@ Available environment variables:
 
 **Note:** The docker-compose file now includes:
 - **Health checks**: All services have health checks to monitor container health
-- **Service dependencies with health conditions**: Services wait for dependencies to be healthy before starting (coturn → synapse → element/element-call/synapse-admin)
+- **Fast startup with service dependencies**: Services start in proper order (coturn → synapse → element/element-call/synapse-admin) but don't wait for health checks, enabling faster startup
 - **Network isolation**: All services communicate through a dedicated `matrix-network`
 - **Environment-based configuration**: Easy customization without editing docker-compose.yaml
 

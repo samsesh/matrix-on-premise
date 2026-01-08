@@ -594,7 +594,7 @@ services:
       start_period: 60s
     depends_on:
       coturn:
-        condition: service_healthy
+        condition: service_started
     networks:
       - matrix-network
 
@@ -616,7 +616,7 @@ services:
       start_period: 20s
     depends_on:
       synapse:
-        condition: service_healthy
+        condition: service_started
     networks:
       - matrix-network
 
@@ -635,7 +635,7 @@ services:
       start_period: 20s
     depends_on:
       synapse:
-        condition: service_healthy
+        condition: service_started
     networks:
       - matrix-network
 EOF
@@ -659,9 +659,9 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       start_period: 30s
     depends_on:
       synapse:
-        condition: service_healthy
+        condition: service_started
       lk-jwt-service:
-        condition: service_healthy
+        condition: service_started
     networks:
       - matrix-network
 
@@ -704,7 +704,7 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       start_period: 20s
     depends_on:
       livekit:
-        condition: service_healthy
+        condition: service_started
     networks:
       - matrix-network
 EOF
