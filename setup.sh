@@ -644,6 +644,28 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> docker-compose.yaml << EOF
 
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    restart: unless-stopped
+    ports:
+      - "$LIVEKIT_JWT_PORT:8080"
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
+      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      synapse:
+        condition: service_started
+    networks:
+      - matrix-network
+
   element-call:
     image: ghcr.io/element-hq/element-call:latest
     restart: unless-stopped
@@ -683,27 +705,12 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       timeout: 10s
       retries: 3
       start_period: 20s
-    networks:
-      - matrix-network
-
-  lk-jwt-service:
-    image: ghcr.io/element-hq/lk-jwt-service:latest
-    restart: unless-stopped
-    ports:
-      - "$LIVEKIT_JWT_PORT:8080"
-    environment:
-      - LIVEKIT_URL=ws://livekit:7880
-      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
-      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
-      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
     depends_on:
-      livekit:
+      synapse:
+        condition: service_started
+      element:
+        condition: service_started
+      synapse-admin:
         condition: service_started
     networks:
       - matrix-network
