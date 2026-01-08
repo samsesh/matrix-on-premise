@@ -73,6 +73,10 @@ Available environment variables:
 | `ELEMENT_CALL_PORT` | `8082` | Port for Element Call video conferencing service |
 | `LIVEKIT_KEY` | `devkey` | LiveKit API key for MatrixRTC (change in production!) |
 | `LIVEKIT_SECRET` | `secret` | LiveKit API secret for MatrixRTC (change in production!) |
+| `LIVEKIT_DOMAIN` | `localhost` | Domain name for LiveKit SFU server |
+| `LIVEKIT_JWT_DOMAIN` | `localhost` | Domain name for LiveKit JWT authentication service |
+| `WEBRTC_PORT_START` | `50000` | Starting port for LiveKit WebRTC media traffic (UDP) |
+| `WEBRTC_PORT_END` | `60000` | Ending port for LiveKit WebRTC media traffic (UDP) |
 
 **Note:** The docker-compose file now includes:
 - **Service dependencies**: Services start in the correct order (coturn → synapse → element/element-call/synapse-admin)
@@ -336,8 +340,19 @@ After starting the services, verify LiveKit is working:
 ### Troubleshooting LiveKit
 
 - **Services won't start**: Check logs with `docker compose logs livekit lk-jwt-service`
-- **Calls don't connect**: Ensure ports 7880-7882 and 50000-60000/udp are accessible and LIVEKIT_KEY/SECRET match in all services
+- **Port conflict errors (address already in use)**: 
+  - The default WebRTC port range (50000-60000) may conflict with other services
+  - During setup, you can specify a different port range when prompted
+  - To change it after setup, update `WEBRTC_PORT_START` and `WEBRTC_PORT_END` in `.env` file
+  - Also update the `port_range_start` and `port_range_end` in `livekit.yaml`
+  - Then restart: `docker compose down && docker compose up -d`
+- **Calls don't connect**: Ensure ports 7880-7882 and your configured WebRTC port range (UDP) are accessible and LIVEKIT_KEY/SECRET match in all services
 - **Element Call not using LiveKit**: Verify `element-call-config.json` has the correct `livekit_service_url`
+- **Domain resolution issues**: 
+  - Ensure your LiveKit and JWT service domains are correctly configured
+  - For local deployments, use `localhost` or your server's IP address
+  - For production, ensure DNS records point to your server
+  - Update `LIVEKIT_DOMAIN` and `LIVEKIT_JWT_DOMAIN` in `.env` and regenerate `element-call-config.json`
 
 ## Managing Your Server
 

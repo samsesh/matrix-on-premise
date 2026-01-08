@@ -86,7 +86,7 @@ services:
       - "7881:7881"
       - "7882:7882/udp"
       # WebRTC port range for media traffic
-      - "50000-60000:50000-60000/udp"
+      - "${WEBRTC_PORT_START:-50000}-${WEBRTC_PORT_END:-60000}:${WEBRTC_PORT_START:-50000}-${WEBRTC_PORT_END:-60000}/udp"
     networks:
       - matrix-network
 
