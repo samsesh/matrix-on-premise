@@ -561,6 +561,12 @@ services:
       - "3478:3478/udp"
       - "5349:5349"
       - "5349:5349/udp"
+    healthcheck:
+      test: ["CMD", "nc", "-zu", "127.0.0.1", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - matrix-network
 
@@ -580,8 +586,15 @@ services:
       - SYNAPSE_REPORT_STATS=\${SYNAPSE_REPORT_STATS:-yes}
       - SYNAPSE_VOIP_TURN_URIS=["turn:\${TURN_SERVER:-localhost}:3478?transport=udp","turn:\${TURN_SERVER:-localhost}:3478?transport=tcp","turns:\${TURN_SERVER:-localhost}:5349?transport=udp","turns:\${TURN_SERVER:-localhost}:5349?transport=tcp"]
       - SYNAPSE_VOIP_TURN_SHARED_SECRET=\${TURN_SHARED_SECRET:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fSs", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
-      - coturn
+      coturn:
+        condition: service_healthy
     networks:
       - matrix-network
 
@@ -595,8 +608,15 @@ services:
       - "$ELEMENT_PORT:80"
     environment:
       - MATRIX_THEMES=\${MATRIX_THEMES:-light,dark}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_healthy
     networks:
       - matrix-network
 
@@ -607,8 +627,15 @@ services:
       - "$ADMIN_PORT:80"
     environment:
       - REACT_APP_SERVER=http://synapse:8008
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_healthy
     networks:
       - matrix-network
 EOF
@@ -624,9 +651,17 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "$ELEMENT_CALL_PORT:8080"
     volumes:
       - ./element-call-config.json:/app/config.json
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      - synapse
-      - lk-jwt-service
+      synapse:
+        condition: service_healthy
+      lk-jwt-service:
+        condition: service_healthy
     networks:
       - matrix-network
 
@@ -642,6 +677,12 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "7882:7882/udp"
       # WebRTC port range for media traffic
       - "$WEBRTC_PORT_START-$WEBRTC_PORT_END:$WEBRTC_PORT_START-$WEBRTC_PORT_END/udp"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - matrix-network
 
@@ -655,8 +696,15 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
       - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
       - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - livekit
+      livekit:
+        condition: service_healthy
     networks:
       - matrix-network
 EOF

@@ -79,7 +79,8 @@ Available environment variables:
 | `WEBRTC_PORT_END` | `60000` | Ending port for LiveKit WebRTC media traffic (UDP) |
 
 **Note:** The docker-compose file now includes:
-- **Service dependencies**: Services start in the correct order (coturn → synapse → element/element-call/synapse-admin)
+- **Health checks**: All services have health checks to monitor container health
+- **Service dependencies with health conditions**: Services wait for dependencies to be healthy before starting (coturn → synapse → element/element-call/synapse-admin)
 - **Network isolation**: All services communicate through a dedicated `matrix-network`
 - **Environment-based configuration**: Easy customization without editing docker-compose.yaml
 
@@ -370,6 +371,19 @@ docker compose restart
 ### Stop Services
 ```bash
 docker compose down
+```
+
+### Check Service Health
+All containers have health checks configured. View the health status:
+```bash
+docker compose ps
+```
+
+The `STATUS` column will show health status for each service (e.g., `Up (healthy)`, `Up (unhealthy)`, `Up (health: starting)`).
+
+To see detailed health check information:
+```bash
+docker inspect --format='{{json .State.Health}}' matrix-on-premise-synapse-1 | jq
 ```
 
 ### Backup Your Data
