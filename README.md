@@ -7,9 +7,13 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 - 🚀 **One-Command Setup**: Automated installation with interactive script
 - 💬 **Modern UI**: Element Web client with custom Samsesh branding
 - 🎥 **Voice & Video**: Built-in Coturn TURN server for reliable calls
-- 📞 **Element Call**: Standalone video conferencing with LiveKit backend
+- 📞 **Video Conferencing**: Choose between Element Call (LiveKit) or Jitsi Meet
 - 🎬 **LiveKit Integration**: Professional-grade SFU for scalable video calls
+- 🎪 **Jitsi Meet**: Self-hosted or external Jitsi for group video calls
+- 📱 **Push Notifications**: Optional Sygnal gateway for mobile apps
+- 📢 **Server Notices**: System messages and announcements
 - 🛠️ **Admin Panel**: Web-based administration interface
+- 🌐 **Federation**: Full Matrix federation support on port 8448
 - 🔒 **Privacy First**: Self-hosted with no data collection
 - 📦 **Containerized**: Easy deployment with Docker Compose
 
@@ -17,13 +21,28 @@ A complete self-hosted chat platform powered by Matrix Synapse, Element Web, and
 
 1. <https://matrix.org/docs/projects/server/synapse>
 2. <https://element.io/solutions/on-premise-collaboration>
+3. <https://jitsi.org/jitsi-meet/>
+4. <https://github.com/matrix-org/sygnal>
 
 ## Requirements
 
 1. A Linux server (Ubuntu 20.04+ recommended)
 2. Docker and Docker Compose installed
 3. Public IP address (for external access)
-4. Open ports: 8080 (Element), 8008 (Synapse), 8448 (Federation), 8081 (Admin), 8082 (Element Call), 8083 (lk-jwt-service), 3478/5349 (TURN), 7880-7882 (LiveKit), 50000-60000/udp (LiveKit WebRTC)
+4. Open ports: 
+   - 8080 (Element Web)
+   - 8008 (Synapse Client API)
+   - 8448 (Federation)
+   - 8081 (Admin Panel)
+   - 8082 (Element Call, optional)
+   - 8083 (lk-jwt-service, optional)
+   - 8443 (Jitsi HTTP, optional)
+   - 8444 (Jitsi HTTPS, optional)
+   - 3478/5349 (TURN)
+   - 7880-7882 (LiveKit, optional)
+   - 10000/udp (Jitsi JVB, optional)
+   - 50000-60000/udp (LiveKit WebRTC, optional)
+   - 5000 (Sygnal push gateway, optional)
 
 ## Quick Start
 
@@ -41,7 +60,12 @@ chmod +x setup.sh
 The script will guide you through:
 - Server configuration (IP, domain)
 - System configuration (timezone)
-- Video conferencing choice (Element Call or Jitsi)
+- Video conferencing choice:
+  1. **Element Call with LiveKit** (recommended, self-hosted)
+  2. **External Jitsi** (uses meet.element.io by default)
+  3. **Self-hosted Jitsi Meet** (full Jitsi stack)
+- Push notification gateway (optional Sygnal)
+- Server notices configuration (optional)
 - Admin user creation
 - Port configuration
 - Automatic service deployment
@@ -71,12 +95,41 @@ Available environment variables:
 | `TURN_SHARED_SECRET` | *(empty)* | TURN server shared secret for authentication |
 | `MATRIX_THEMES` | `light,dark` | Available themes for Element web client |
 | `ELEMENT_CALL_PORT` | `8082` | Port for Element Call video conferencing service |
+
+**LiveKit Configuration (for Element Call):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `LIVEKIT_KEY` | `devkey` | LiveKit API key for MatrixRTC (change in production!) |
 | `LIVEKIT_SECRET` | `secret` | LiveKit API secret for MatrixRTC (change in production!) |
 | `LIVEKIT_DOMAIN` | `localhost` | Domain name for LiveKit SFU server |
 | `LIVEKIT_JWT_DOMAIN` | `localhost` | Domain name for LiveKit JWT authentication service |
 | `WEBRTC_PORT_START` | `50000` | Starting port for LiveKit WebRTC media traffic (UDP) |
 | `WEBRTC_PORT_END` | `60000` | Ending port for LiveKit WebRTC media traffic (UDP) |
+
+**Jitsi Meet Configuration (for self-hosted Jitsi):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `JITSI_HTTP_PORT` | `8443` | HTTP port for Jitsi web interface |
+| `JITSI_HTTPS_PORT` | `8444` | HTTPS port for Jitsi web interface |
+| `JITSI_ENABLE_AUTH` | `0` | Enable Jitsi authentication |
+| `JITSI_ENABLE_GUESTS` | `1` | Allow guest access to conferences |
+| `JITSI_PUBLIC_URL` | `https://meet.jitsi` | Public URL for Jitsi Meet |
+| `JITSI_DOCKER_HOST_ADDRESS` | *(empty)* | Server's public IP for Jitsi JVB |
+| `JVB_PORT` | `10000` | UDP port for Jitsi Video Bridge media |
+| `JVB_TCP_PORT` | `4443` | TCP port for Jitsi Video Bridge |
+| `JICOFO_COMPONENT_SECRET` | *(generated)* | Jitsi component secret |
+| `JICOFO_AUTH_PASSWORD` | *(generated)* | Jitsi Jicofo auth password |
+| `JVB_AUTH_PASSWORD` | *(generated)* | Jitsi JVB auth password |
+
+**Sygnal Push Gateway Configuration:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SYGNAL_PORT` | `127.0.0.1:5000` | Port binding for Sygnal push gateway |
+| `PUSH_GATEWAY_URL` | *(empty)* | URL of push gateway for homeserver.yaml |
+| `PUSH_GATEWAY_ENABLED` | `false` | Whether push gateway is enabled |
 
 **Note:** The docker-compose file now includes:
 - **Health checks**: All services have health checks to monitor container health
@@ -412,6 +465,205 @@ For production deployments with domain names and SSL/TLS, you need to configure 
   - For production, ensure DNS records point to your server
   - Update `LIVEKIT_DOMAIN` and `LIVEKIT_JWT_DOMAIN` in `.env` and regenerate `element-call-config.json`
   - Verify SSL/TLS certificates are valid for your domains
+
+## Jitsi Meet Integration
+
+If you chose self-hosted Jitsi Meet during setup, the stack includes 4 additional services:
+
+### Jitsi Services
+
+1. **jitsi-web** (Ports 8443/8444): The web interface for Jitsi Meet
+2. **jitsi-prosody** (Internal): XMPP server for signaling
+3. **jitsi-jicofo** (Internal): Jitsi Conference Focus - manages conferences
+4. **jitsi-jvb** (Port 10000 UDP): Jitsi Video Bridge - routes media
+
+### Configuration
+
+The setup script generates all necessary passwords automatically. Jitsi uses your Coturn server for TURN/STUN by default.
+
+**Key Ports:**
+- 8443: HTTP interface
+- 8444: HTTPS interface (if SSL configured)
+- 10000/udp: JVB media port
+
+### Using Jitsi
+
+Once running, access Jitsi at:
+- Local: `http://localhost:8443`
+- Production: `https://your-jitsi-domain.com`
+
+Element Web is configured to use Jitsi for group video calls via the `jitsi.preferred_domain` setting in `element-config.json`.
+
+### Jitsi vs Element Call
+
+| Feature | Element Call (LiveKit) | Jitsi Meet |
+|---------|----------------------|------------|
+| Native Matrix integration | ✅ Excellent | ⚠️ Via widget |
+| Self-hosted | ✅ Yes | ✅ Yes |
+| External option | ❌ No | ✅ Yes (meet.element.io) |
+| Mobile apps | ✅ Element apps | ✅ Jitsi apps |
+| Screen sharing | ✅ Yes | ✅ Yes |
+| Recording | ❌ No | ✅ Yes (with Jibri) |
+| Scalability | ✅ Excellent | ✅ Good |
+
+### Troubleshooting Jitsi
+
+- **Can't join conferences**: Check that JVB port 10000/udp is accessible
+- **No video/audio**: Verify TURN server is working and configured
+- **Connection issues**: Check `JITSI_DOCKER_HOST_ADDRESS` is set to your public IP
+- **Authentication problems**: Review Jitsi logs: `docker compose logs jitsi-prosody jitsi-jicofo`
+
+## Push Notifications with Sygnal
+
+Sygnal is a push notification gateway that enables mobile notifications for Matrix clients.
+
+### Configuration
+
+If you enabled Sygnal during setup, the service runs on `127.0.0.1:5000` by default.
+
+**Important**: Sygnal requires additional configuration in `sygnal.yaml` for each mobile app:
+
+```yaml
+apps:
+  # Android app using FCM
+  com.example.myapp.android:
+    type: gcm
+    api_key: "YOUR_FCM_SERVER_KEY"
+  
+  # iOS app using APNs
+  com.example.myapp.ios:
+    type: apns
+    certfile: /path/to/apns_cert.pem
+    platform: prod  # or 'dev' for development
+```
+
+### Testing Sygnal
+
+Check if Sygnal is running:
+```bash
+curl http://localhost:5000/health
+```
+
+### Synapse Configuration
+
+The setup script configures push notifications in `homeserver.yaml`:
+
+```yaml
+push:
+  enabled: true
+  include_content: true
+  group_unread_count_by_room: true
+```
+
+To specify a custom push gateway URL:
+```yaml
+# Add this to homeserver.yaml
+push_gateway_url: "http://sygnal:5000"
+```
+
+### Resources
+
+- [Sygnal Documentation](https://github.com/matrix-org/sygnal)
+- [FCM Setup Guide](https://firebase.google.com/docs/cloud-messaging)
+- [APNs Certificate Setup](https://developer.apple.com/documentation/usernotifications)
+
+## Server Notices
+
+Server notices allow administrators to send system-wide messages and announcements.
+
+### Configuration
+
+If enabled during setup, a special "Server" user is created that can send notices to all users. The notices room is automatically joined by users.
+
+**Default Configuration:**
+- Username: `@server:yourdomain.com`
+- Display name: "Server"
+- Room name: "Server Notices"
+- Auto-join: Enabled
+
+### Sending Server Notices
+
+1. Log in as the server user using a Matrix client
+2. The server notices room will be created automatically
+3. Messages sent in this room appear to all users
+
+### Customization
+
+Edit `synapse/homeserver.yaml` to customize:
+
+```yaml
+server_notices:
+  system_mxid_localpart: server  # Change username
+  system_mxid_display_name: "Server"  # Change display name
+  room_name: "Server Notices"  # Change room name
+  auto_join: true  # Auto-join users to the room
+```
+
+After changes, restart Synapse:
+```bash
+docker compose restart synapse
+```
+
+## Federation Support
+
+Matrix federation allows your server to communicate with other Matrix servers.
+
+### Configuration
+
+Federation is automatically enabled on **port 8448**. The setup script configures:
+
+```yaml
+listeners:
+  # Client API (also handles federation)
+  - port: 8008
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+  
+  # Dedicated federation listener
+  - port: 8448
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [federation]
+```
+
+### DNS Setup for Federation
+
+For federation to work, you need to configure DNS records:
+
+**Option 1: Using port 8448 (Recommended)**
+```
+_matrix._tcp.yourdomain.com. 3600 IN SRV 10 0 8448 matrix.yourdomain.com.
+```
+
+**Option 2: Using .well-known delegation**
+
+Serve this at `https://yourdomain.com/.well-known/matrix/server`:
+```json
+{
+  "m.server": "matrix.yourdomain.com:443"
+}
+```
+
+### Testing Federation
+
+Check if federation is working:
+```bash
+# Test your server's federation
+curl https://federationtester.matrix.org/api/report?server_name=yourdomain.com
+
+# Check SRV record
+dig _matrix._tcp.yourdomain.com SRV
+```
+
+### Troubleshooting Federation
+
+- **Can't federate**: Ensure port 8448 is open in your firewall
+- **Certificate errors**: Use valid SSL/TLS certificates
+- **SRV record issues**: Wait for DNS propagation (up to 48 hours)
+- **Check logs**: `docker compose logs synapse | grep federation`
 
 ## Managing Your Server
 
