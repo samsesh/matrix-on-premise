@@ -1,0 +1,55 @@
+# Sygnal Push Notification Gateway Configuration
+# https://github.com/matrix-org/sygnal
+
+http:
+  bind_addresses: ['0.0.0.0']
+  port: 5000
+
+log:
+  setup:
+    version: 1
+    formatters:
+      simple:
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers: [console]
+
+metrics:
+  # Enable Prometheus metrics
+  prometheus:
+    enabled: false
+    # Address and port to bind for metrics
+    # address: '0.0.0.0'
+    # port: 8000
+
+# Push gateway apps configuration
+# Configure your push apps here
+apps:
+  # Example GCM/FCM configuration for Android
+  # com.example.myapp.android:
+  #   type: gcm
+  #   api_key: "YOUR_FCM_SERVER_KEY"
+  
+  # Example APNs configuration for iOS
+  # com.example.myapp.ios:
+  #   type: apns
+  #   # Path to your APNs certificate
+  #   certfile: /path/to/apns_cert.pem
+  #   # For production use 'prod', for development use 'dev'
+  #   platform: prod
+  
+  # Placeholder app for testing (will not send actual notifications)
+  com.github.matrix-org.matrix-sygnal:
+    type: gcm
+    api_key: "DUMMY"
+
+# Database configuration (optional, for storing push tokens)
+# db:
+#   type: sqlite
+#   file: /data/sygnal.db

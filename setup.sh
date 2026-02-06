@@ -183,15 +183,16 @@ echo ""
 print_info "=== Video Conferencing Configuration ==="
 echo ""
 echo "Choose your video conferencing service:"
-echo "  1) Element Call (Recommended - Self-hosted, fully integrated)"
-echo "  2) Jitsi (Uses meet.element.io by default)"
+echo "  1) Element Call (Recommended - Self-hosted, fully integrated with LiveKit)"
+echo "  2) Jitsi (External server)"
+echo "  3) Jitsi (Self-hosted - will install Jitsi Meet)"
 echo ""
-read -p "Select option (1 or 2) [default: 1]: " VIDEO_CONF_CHOICE
+read -p "Select option (1, 2, or 3) [default: 1]: " VIDEO_CONF_CHOICE
 VIDEO_CONF_CHOICE=${VIDEO_CONF_CHOICE:-1}
 
-while [[ ! "$VIDEO_CONF_CHOICE" =~ ^[12]$ ]]; do
-    print_error "Invalid choice. Please enter 1 or 2."
-    read -p "Select option (1 or 2) [default: 1]: " VIDEO_CONF_CHOICE
+while [[ ! "$VIDEO_CONF_CHOICE" =~ ^[123]$ ]]; do
+    print_error "Invalid choice. Please enter 1, 2, or 3."
+    read -p "Select option (1, 2, or 3) [default: 1]: " VIDEO_CONF_CHOICE
     VIDEO_CONF_CHOICE=${VIDEO_CONF_CHOICE:-1}
 done
 
@@ -199,10 +200,129 @@ if [ "$VIDEO_CONF_CHOICE" = "2" ]; then
     read -p "Enter Jitsi domain [default: meet.element.io]: " JITSI_DOMAIN
     JITSI_DOMAIN=${JITSI_DOMAIN:-meet.element.io}
     USE_ELEMENT_CALL="no"
-    print_info "Will use Jitsi at: $JITSI_DOMAIN"
+    USE_JITSI_SELF_HOSTED="no"
+    print_info "Will use external Jitsi at: $JITSI_DOMAIN"
+elif [ "$VIDEO_CONF_CHOICE" = "3" ]; then
+    USE_ELEMENT_CALL="no"
+    USE_JITSI_SELF_HOSTED="yes"
+    
+    echo ""
+    print_info "=== Self-Hosted Jitsi Configuration ==="
+    echo ""
+    
+    read -p "Enter Jitsi domain (e.g., meet.example.com) [default: meet.jitsi]: " JITSI_DOMAIN
+    JITSI_DOMAIN=${JITSI_DOMAIN:-meet.jitsi}
+    
+    if [ "$JITSI_DOMAIN" != "meet.jitsi" ] && [ "$JITSI_DOMAIN" != "localhost" ]; then
+        while ! validate_domain "$JITSI_DOMAIN"; do
+            print_error "Invalid domain format."
+            read -p "Enter Jitsi domain [default: meet.jitsi]: " JITSI_DOMAIN
+            JITSI_DOMAIN=${JITSI_DOMAIN:-meet.jitsi}
+            if [ "$JITSI_DOMAIN" = "meet.jitsi" ] || [ "$JITSI_DOMAIN" = "localhost" ]; then
+                break
+            fi
+        done
+    fi
+    
+    # Generate Jitsi passwords
+    print_info "Generating secure Jitsi passwords..."
+    JICOFO_COMPONENT_SECRET=$(generate_password)
+    JICOFO_AUTH_PASSWORD=$(generate_password)
+    JVB_AUTH_PASSWORD=$(generate_password)
+    JIGASI_XMPP_PASSWORD=$(generate_password)
+    JIBRI_RECORDER_PASSWORD=$(generate_password)
+    JIBRI_XMPP_PASSWORD=$(generate_password)
+    print_success "Jitsi credentials generated"
+    
+    print_success "Will use self-hosted Jitsi at: $JITSI_DOMAIN"
+    print_info "Jitsi will use Coturn for TURN/STUN services"
 else
     USE_ELEMENT_CALL="yes"
+    USE_JITSI_SELF_HOSTED="no"
     print_info "Will use Element Call for video conferencing"
+    
+    echo ""
+    print_info "=== LiveKit Domain Configuration ==="
+    echo ""
+    echo "LiveKit services can be accessed via domain names or IP addresses."
+    echo "If you have domain names configured, enter them below."
+    echo "For local deployments, you can use localhost or your server's IP."
+    echo ""
+    
+    read -p "Enter LiveKit JWT service domain (e.g., livekit-jwt.example.com) [default: localhost]: " LIVEKIT_JWT_DOMAIN
+    LIVEKIT_JWT_DOMAIN=${LIVEKIT_JWT_DOMAIN:-localhost}
+    
+    if [ "$LIVEKIT_JWT_DOMAIN" != "localhost" ] && [ "$LIVEKIT_JWT_DOMAIN" != "$SERVER_IP" ]; then
+        while ! validate_domain "$LIVEKIT_JWT_DOMAIN"; do
+            print_error "Invalid domain format."
+            read -p "Enter LiveKit JWT service domain [default: localhost]: " LIVEKIT_JWT_DOMAIN
+            LIVEKIT_JWT_DOMAIN=${LIVEKIT_JWT_DOMAIN:-localhost}
+            if [ "$LIVEKIT_JWT_DOMAIN" = "localhost" ] || [ "$LIVEKIT_JWT_DOMAIN" = "$SERVER_IP" ]; then
+                break
+            fi
+        done
+    fi
+    
+    read -p "Enter LiveKit SFU domain (e.g., livekit.example.com) [default: localhost]: " LIVEKIT_DOMAIN
+    LIVEKIT_DOMAIN=${LIVEKIT_DOMAIN:-localhost}
+    
+    if [ "$LIVEKIT_DOMAIN" != "localhost" ] && [ "$LIVEKIT_DOMAIN" != "$SERVER_IP" ]; then
+        while ! validate_domain "$LIVEKIT_DOMAIN"; do
+            print_error "Invalid domain format."
+            read -p "Enter LiveKit SFU domain [default: localhost]: " LIVEKIT_DOMAIN
+            LIVEKIT_DOMAIN=${LIVEKIT_DOMAIN:-localhost}
+            if [ "$LIVEKIT_DOMAIN" = "localhost" ] || [ "$LIVEKIT_DOMAIN" = "$SERVER_IP" ]; then
+                break
+            fi
+        done
+    fi
+    
+    print_success "LiveKit JWT service will be accessible at: $LIVEKIT_JWT_DOMAIN"
+    print_success "LiveKit SFU will be accessible at: $LIVEKIT_DOMAIN"
+fi
+
+echo ""
+print_info "=== Push Notification Configuration ==="
+echo ""
+echo "Enable Sygnal push notification gateway for mobile apps?"
+echo "Note: You'll need to configure push apps in sygnal.yaml after setup"
+echo ""
+read -p "Enable Sygnal push gateway? (yes/no) [default: no]: " ENABLE_SYGNAL
+ENABLE_SYGNAL=${ENABLE_SYGNAL:-no}
+
+if [ "$ENABLE_SYGNAL" = "yes" ] || [ "$ENABLE_SYGNAL" = "y" ]; then
+    ENABLE_SYGNAL="yes"
+    if [ "$MATRIX_DOMAIN" = "localhost" ]; then
+        PUSH_GATEWAY_URL="http://$SERVER_IP:5000"
+    else
+        read -p "Enter push gateway URL [default: http://$SERVER_IP:5000]: " PUSH_GATEWAY_URL
+        PUSH_GATEWAY_URL=${PUSH_GATEWAY_URL:-http://$SERVER_IP:5000}
+    fi
+    print_success "Sygnal push gateway will be enabled at: $PUSH_GATEWAY_URL"
+else
+    ENABLE_SYGNAL="no"
+    PUSH_GATEWAY_URL=""
+    print_info "Push gateway disabled"
+fi
+
+echo ""
+print_info "=== Server Notices Configuration ==="
+echo ""
+echo "Enable server notices for system messages and announcements?"
+echo ""
+read -p "Enable server notices? (yes/no) [default: yes]: " ENABLE_SERVER_NOTICES
+ENABLE_SERVER_NOTICES=${ENABLE_SERVER_NOTICES:-yes}
+
+if [ "$ENABLE_SERVER_NOTICES" = "yes" ] || [ "$ENABLE_SERVER_NOTICES" = "y" ]; then
+    ENABLE_SERVER_NOTICES="yes"
+    read -p "Server notices username [default: server]: " SERVER_NOTICES_USER
+    SERVER_NOTICES_USER=${SERVER_NOTICES_USER:-server}
+    read -p "Server notices display name [default: Server]: " SERVER_NOTICES_DISPLAY_NAME
+    SERVER_NOTICES_DISPLAY_NAME=${SERVER_NOTICES_DISPLAY_NAME:-Server}
+    print_success "Server notices will be enabled with user: $SERVER_NOTICES_USER"
+else
+    ENABLE_SERVER_NOTICES="no"
+    print_info "Server notices disabled"
 fi
 
 echo ""
@@ -249,6 +369,30 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
         read -p "Element Call port [default: 8082]: " ELEMENT_CALL_PORT
         ELEMENT_CALL_PORT=${ELEMENT_CALL_PORT:-8082}
     done
+    
+    echo ""
+    print_info "LiveKit WebRTC requires a UDP port range for media traffic."
+    read -p "WebRTC port range start [default: 50000]: " WEBRTC_PORT_START
+    WEBRTC_PORT_START=${WEBRTC_PORT_START:-50000}
+    while ! validate_port "$WEBRTC_PORT_START"; do
+        print_error "Invalid port number (must be 1-65535)."
+        read -p "WebRTC port range start [default: 50000]: " WEBRTC_PORT_START
+        WEBRTC_PORT_START=${WEBRTC_PORT_START:-50000}
+    done
+    
+    read -p "WebRTC port range end [default: 60000]: " WEBRTC_PORT_END
+    WEBRTC_PORT_END=${WEBRTC_PORT_END:-60000}
+    while ! validate_port "$WEBRTC_PORT_END" || [ "$WEBRTC_PORT_END" -le "$WEBRTC_PORT_START" ]; do
+        if ! validate_port "$WEBRTC_PORT_END"; then
+            print_error "Invalid port number (must be 1-65535)."
+        else
+            print_error "End port must be greater than start port ($WEBRTC_PORT_START)."
+        fi
+        read -p "WebRTC port range end [default: 60000]: " WEBRTC_PORT_END
+        WEBRTC_PORT_END=${WEBRTC_PORT_END:-60000}
+    done
+    
+    print_success "WebRTC will use UDP ports $WEBRTC_PORT_START-$WEBRTC_PORT_END"
 fi
 
 echo ""
@@ -269,6 +413,8 @@ echo "Federation Port:  $FEDERATION_PORT"
 echo "Admin Panel Port: $ADMIN_PORT"
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     echo "Element Call Port: $ELEMENT_CALL_PORT"
+    echo "LiveKit JWT Domain: $LIVEKIT_JWT_DOMAIN"
+    echo "LiveKit SFU Domain: $LIVEKIT_DOMAIN"
 fi
 echo "Coturn Secret:    [generated - will be saved securely]"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -429,11 +575,16 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     # Define LiveKit JWT service port
     LIVEKIT_JWT_PORT=8083
     
-    # Determine the lk-jwt-service URL
-    if [ "$MATRIX_DOMAIN" = "localhost" ]; then
+    # Determine the lk-jwt-service URL based on user-provided domain
+    if [ "$LIVEKIT_JWT_DOMAIN" = "localhost" ]; then
         LIVEKIT_JWT_URL="http://$SERVER_IP:$LIVEKIT_JWT_PORT"
     else
-        LIVEKIT_JWT_URL="http://$MATRIX_DOMAIN:$LIVEKIT_JWT_PORT"
+        # Check if user wants to use HTTPS for production domains
+        if [[ "$LIVEKIT_JWT_DOMAIN" != "$SERVER_IP" ]]; then
+            LIVEKIT_JWT_URL="https://$LIVEKIT_JWT_DOMAIN"
+        else
+            LIVEKIT_JWT_URL="http://$LIVEKIT_JWT_DOMAIN:$LIVEKIT_JWT_PORT"
+        fi
     fi
     
     cat > element-call-config.json << EOF
@@ -452,16 +603,20 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
   ]
 }
 EOF
-    print_success "Element Call configuration created with LiveKit support"
+    print_success "Element Call configuration created with LiveKit support at $LIVEKIT_JWT_URL"
     
     # Update livekit.yaml with generated credentials using a more robust method
-    print_info "Configuring LiveKit with secure credentials..."
-    # Create a temporary file with the updated keys section
-    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" '
+    print_info "Configuring LiveKit with secure credentials and port range..."
+    # Create a temporary file with the updated keys section, port range, and Docker-optimized settings
+    awk -v key="$LIVEKIT_KEY" -v secret="$LIVEKIT_SECRET" -v port_start="$WEBRTC_PORT_START" -v port_end="$WEBRTC_PORT_END" '
         /^keys:/ { print; getline; printf "  %s: %s\n", key, secret; next }
+        /^[[:space:]]*port_range_start:/ { printf "  port_range_start: %s\n", port_start; next }
+        /^[[:space:]]*port_range_end:/ { printf "  port_range_end: %s\n", port_end; next }
+        /^[[:space:]]*use_external_ip:/ { printf "  use_external_ip: false\n"; next }
+        /^[[:space:]]*use_ice_lite:/ { printf "  use_ice_lite: true\n"; next }
         { print }
     ' livekit.yaml > livekit.yaml.tmp && mv livekit.yaml.tmp livekit.yaml
-    print_success "LiveKit configuration updated"
+    print_success "LiveKit configuration updated with ports $WEBRTC_PORT_START-$WEBRTC_PORT_END and Docker-optimized settings"
 fi
 
 # Step 4: Update docker-compose.yml with custom ports
@@ -489,6 +644,12 @@ services:
       - "3478:3478/udp"
       - "5349:5349"
       - "5349:5349/udp"
+    healthcheck:
+      test: ["CMD", "nc", "-zu", "127.0.0.1", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - matrix-network
 
@@ -508,8 +669,15 @@ services:
       - SYNAPSE_REPORT_STATS=\${SYNAPSE_REPORT_STATS:-yes}
       - SYNAPSE_VOIP_TURN_URIS=["turn:\${TURN_SERVER:-localhost}:3478?transport=udp","turn:\${TURN_SERVER:-localhost}:3478?transport=tcp","turns:\${TURN_SERVER:-localhost}:5349?transport=udp","turns:\${TURN_SERVER:-localhost}:5349?transport=tcp"]
       - SYNAPSE_VOIP_TURN_SHARED_SECRET=\${TURN_SHARED_SECRET:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fSs", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
-      - coturn
+      coturn:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -523,8 +691,15 @@ services:
       - "$ELEMENT_PORT:80"
     environment:
       - MATRIX_THEMES=\${MATRIX_THEMES:-light,dark}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -535,8 +710,15 @@ services:
       - "$ADMIN_PORT:80"
     environment:
       - REACT_APP_SERVER=http://synapse:8008
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     depends_on:
-      - synapse
+      synapse:
+        condition: service_started
     networks:
       - matrix-network
 EOF
@@ -545,6 +727,34 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> docker-compose.yaml << EOF
 
+  lk-jwt-service:
+    image: ghcr.io/element-hq/lk-jwt-service:latest
+    restart: unless-stopped
+    ports:
+      - "$LIVEKIT_JWT_PORT:8080"
+    environment:
+      # For Docker-internal communication (default for local deployments)
+      - LIVEKIT_URL=ws://livekit:7880
+      # For production with SSL/TLS and reverse proxy, change to:
+      # - LIVEKIT_URL=wss://matrixrtc.yourdomain.com
+      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
+      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
+      # Restrict call creation to users from specific homeservers (comma-separated)
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      synapse:
+        condition: service_started
+      livekit:
+        condition: service_started
+    networks:
+      - matrix-network
+
   element-call:
     image: ghcr.io/element-hq/element-call:latest
     restart: unless-stopped
@@ -552,9 +762,17 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "$ELEMENT_CALL_PORT:8080"
     volumes:
       - ./element-call-config.json:/app/config.json
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
-      - synapse
-      - lk-jwt-service
+      synapse:
+        condition: service_started
+      lk-jwt-service:
+        condition: service_started
     networks:
       - matrix-network
 
@@ -569,25 +787,187 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
       - "7881:7881"
       - "7882:7882/udp"
       # WebRTC port range for media traffic
-      - "50000-60000:50000-60000/udp"
-    networks:
-      - matrix-network
-
-  lk-jwt-service:
-    image: ghcr.io/element-hq/lk-jwt-service:latest
-    restart: unless-stopped
-    ports:
-      - "$LIVEKIT_JWT_PORT:8080"
-    environment:
-      - LIVEKIT_URL=ws://livekit:7880
-      - LIVEKIT_KEY=\${LIVEKIT_KEY:-devkey}
-      - LIVEKIT_SECRET=\${LIVEKIT_SECRET:-secret}
-      - LIVEKIT_FULL_ACCESS_HOMESERVERS=\${SYNAPSE_SERVER_NAME:-localhost}
-    depends_on:
-      - livekit
+      - "$WEBRTC_PORT_START-$WEBRTC_PORT_END:$WEBRTC_PORT_START-$WEBRTC_PORT_END/udp"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks:
       - matrix-network
 EOF
+fi
+
+# Add Jitsi Meet services if selected
+if [ "$USE_JITSI_SELF_HOSTED" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
+
+  jitsi-web:
+    image: jitsi/web:stable
+    restart: unless-stopped
+    ports:
+      - "\${JITSI_HTTP_PORT:-8443}:80"
+      - "\${JITSI_HTTPS_PORT:-8444}:443"
+    volumes:
+      - ./jitsi/web:/config:Z
+      - ./jitsi/web/letsencrypt:/etc/letsencrypt:Z
+      - ./jitsi/transcripts:/usr/share/jitsi-meet/transcripts:Z
+    environment:
+      - ENABLE_AUTH=\${JITSI_ENABLE_AUTH:-0}
+      - ENABLE_GUESTS=\${JITSI_ENABLE_GUESTS:-1}
+      - ENABLE_LETSENCRYPT=\${JITSI_ENABLE_LETSENCRYPT:-0}
+      - ENABLE_HTTP_REDIRECT=\${JITSI_ENABLE_HTTP_REDIRECT:-1}
+      - ENABLE_TRANSCRIPTIONS=\${JITSI_ENABLE_TRANSCRIPTIONS:-0}
+      - DISABLE_HTTPS=\${JITSI_DISABLE_HTTPS:-1}
+      - JICOFO_COMPONENT_SECRET=\${JICOFO_COMPONENT_SECRET}
+      - JICOFO_AUTH_USER=focus
+      - JICOFO_AUTH_PASSWORD=\${JICOFO_AUTH_PASSWORD}
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD=\${JVB_AUTH_PASSWORD}
+      - JIGASI_XMPP_USER=jigasi
+      - JIGASI_XMPP_PASSWORD=\${JIGASI_XMPP_PASSWORD}
+      - JIBRI_RECORDER_USER=recorder
+      - JIBRI_RECORDER_PASSWORD=\${JIBRI_RECORDER_PASSWORD}
+      - JIBRI_XMPP_USER=jibri
+      - JIBRI_XMPP_PASSWORD=\${JIBRI_XMPP_PASSWORD}
+      - ENABLE_RECORDING=\${JITSI_ENABLE_RECORDING:-0}
+      - TZ=\${TZ:-UTC}
+      - PUBLIC_URL=\${JITSI_PUBLIC_URL:-https://meet.jitsi}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_BOSH_URL_BASE=http://jitsi-prosody:5280
+      - XMPP_MUC_DOMAIN=muc.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_GUEST_DOMAIN=guest.meet.jitsi
+      - XMPP_RECORDER_DOMAIN=recorder.meet.jitsi
+    depends_on:
+      - jitsi-prosody
+      - jitsi-jicofo
+      - jitsi-jvb
+    networks:
+      - matrix-network
+
+  jitsi-prosody:
+    image: jitsi/prosody:stable
+    restart: unless-stopped
+    expose:
+      - '5222'
+      - '5347'
+      - '5280'
+    volumes:
+      - ./jitsi/prosody/config:/config:Z
+      - ./jitsi/prosody/prosody-plugins-custom:/prosody-plugins-custom:Z
+    environment:
+      - AUTH_TYPE=\${JITSI_AUTH_TYPE:-internal}
+      - ENABLE_AUTH=\${JITSI_ENABLE_AUTH:-0}
+      - ENABLE_GUESTS=\${JITSI_ENABLE_GUESTS:-1}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_GUEST_DOMAIN=guest.meet.jitsi
+      - XMPP_MUC_DOMAIN=muc.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_RECORDER_DOMAIN=recorder.meet.jitsi
+      - JICOFO_COMPONENT_SECRET=\${JICOFO_COMPONENT_SECRET}
+      - JICOFO_AUTH_USER=focus
+      - JICOFO_AUTH_PASSWORD=\${JICOFO_AUTH_PASSWORD}
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD=\${JVB_AUTH_PASSWORD}
+      - JIGASI_XMPP_USER=jigasi
+      - JIGASI_XMPP_PASSWORD=\${JIGASI_XMPP_PASSWORD}
+      - JIBRI_XMPP_USER=jibri
+      - JIBRI_XMPP_PASSWORD=\${JIBRI_XMPP_PASSWORD}
+      - JIBRI_RECORDER_USER=recorder
+      - JIBRI_RECORDER_PASSWORD=\${JIBRI_RECORDER_PASSWORD}
+      - LOG_LEVEL=info
+      - TZ=\${TZ:-UTC}
+    networks:
+      - matrix-network
+
+  jitsi-jicofo:
+    image: jitsi/jicofo:stable
+    restart: unless-stopped
+    volumes:
+      - ./jitsi/jicofo:/config:Z
+    environment:
+      - AUTH_TYPE=\${JITSI_AUTH_TYPE:-internal}
+      - ENABLE_AUTH=\${JITSI_ENABLE_AUTH:-0}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_SERVER=jitsi-prosody
+      - JICOFO_COMPONENT_SECRET=\${JICOFO_COMPONENT_SECRET}
+      - JICOFO_AUTH_USER=focus
+      - JICOFO_AUTH_PASSWORD=\${JICOFO_AUTH_PASSWORD}
+      - JVB_BREWERY_MUC=jvbbrewery
+      - JIGASI_BREWERY_MUC=jigasibrewery
+      - JIBRI_BREWERY_MUC=jibribrewery
+      - JIBRI_PENDING_TIMEOUT=90
+      - TZ=\${TZ:-UTC}
+    depends_on:
+      - jitsi-prosody
+    networks:
+      - matrix-network
+
+  jitsi-jvb:
+    image: jitsi/jvb:stable
+    restart: unless-stopped
+    ports:
+      - "\${JVB_PORT:-10000}:10000/udp"
+      - "\${JVB_TCP_PORT:-4443}:4443"
+    volumes:
+      - ./jitsi/jvb:/config:Z
+    environment:
+      - DOCKER_HOST_ADDRESS=\${JITSI_DOCKER_HOST_ADDRESS}
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_SERVER=jitsi-prosody
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD=\${JVB_AUTH_PASSWORD}
+      - JVB_BREWERY_MUC=jvbbrewery
+      - JVB_PORT=\${JVB_PORT:-10000}
+      - JVB_TCP_HARVESTER_DISABLED=true
+      - JVB_TCP_PORT=\${JVB_TCP_PORT:-4443}
+      - JVB_STUN_SERVERS=stun.l.google.com:19302,stun1.l.google.com:19302,stun2.l.google.com:19302
+      - JVB_ENABLE_APIS=rest,colibri
+      - TZ=\${TZ:-UTC}
+    depends_on:
+      - jitsi-prosody
+    networks:
+      - matrix-network
+EOF
+    print_success "Jitsi Meet services configured"
+fi
+
+# Add Sygnal push gateway if enabled
+if [ "$ENABLE_SYGNAL" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
+
+  sygnal:
+    image: matrixdotorg/sygnal:latest
+    container_name: sygnal
+    restart: unless-stopped
+    ports:
+      - "\${SYGNAL_PORT:-127.0.0.1:5000}:5000"
+    volumes:
+      - ./sygnal.yaml:/etc/sygnal/sygnal.yaml:ro
+      - ./sygnal.yaml:/sygnal.yaml:ro
+    command:
+      - python
+      - -m
+      - sygnal.sygnal
+      - -c
+      - /etc/sygnal/sygnal.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - matrix-network
+EOF
+    print_success "Sygnal push gateway configured"
 fi
 
 cat >> docker-compose.yaml << EOF
@@ -683,8 +1063,86 @@ rc_message:
 rc_delayed_event_mgmt:
     per_second: 1
     burst_count: 20
+
 EOF
+
+    # Add server notices configuration if enabled
+    if [ "$ENABLE_SERVER_NOTICES" = "yes" ]; then
+        cat >> synapse/homeserver.yaml << EOF
+# Server Notices configuration
+server_notices:
+    system_mxid_localpart: $SERVER_NOTICES_USER
+    system_mxid_display_name: "$SERVER_NOTICES_DISPLAY_NAME"
+    room_name: "Server Notices"
+    auto_join: true
+
+EOF
+        print_success "Server notices configured"
+    fi
+    
+    # Add push gateway configuration if enabled
+    if [ "$ENABLE_SYGNAL" = "yes" ]; then
+        cat >> synapse/homeserver.yaml << EOF
+# Push notification gateway configuration
+push:
+    enabled: true
+    # URL of your push gateway (Sygnal)
+    include_content: true
+    group_unread_count_by_room: true
+    
+# Custom push gateway
+# Note: Configure this after setup if using external gateway
+# push_gateway_url: "$PUSH_GATEWAY_URL"
+
+EOF
+        print_success "Push gateway configuration added"
+    fi
+    
     print_success "TURN server and MatrixRTC configured in homeserver.yaml"
+    
+    # Update listeners to include federation port
+    print_info "Updating listener configuration for federation..."
+    
+    # Create a backup of homeserver.yaml
+    cp synapse/homeserver.yaml synapse/homeserver.yaml.backup
+    
+    # Use sed to update the listeners section
+    # Find and replace the listeners section to add the federation listener
+    awk '
+    /^listeners:/ {
+        print "listeners:"
+        print "  # Client API listener"
+        print "  - port: 8008"
+        print "    tls: false"
+        print "    type: http"
+        print "    x_forwarded: true"
+        print "    bind_addresses: [\"0.0.0.0\"]"
+        print "    resources:"
+        print "      - names: [client, federation]"
+        print "        compress: false"
+        print ""
+        print "  # Federation API listener"
+        print "  - port: 8448"
+        print "    type: http"
+        print "    tls: false"
+        print "    x_forwarded: true"
+        print "    bind_addresses: [\"0.0.0.0\"]"
+        print "    resources:"
+        print "      - names: [federation]"
+        
+        # Skip the original listeners section
+        in_listeners = 1
+        next
+    }
+    in_listeners && /^[^ ]/ {
+        in_listeners = 0
+    }
+    !in_listeners {
+        print
+    }
+    ' synapse/homeserver.yaml.backup > synapse/homeserver.yaml
+    
+    print_success "Federation listener configured on port 8448"
 fi
 
 # Create .env file with configuration
@@ -711,10 +1169,57 @@ MATRIX_THEMES=light,dark
 # Element Call Configuration
 ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
 
+EOF
+
+if [ "$USE_ELEMENT_CALL" = "yes" ]; then
+    cat >> .env << EOF
 # LiveKit Configuration (for MatrixRTC backend)
 LIVEKIT_KEY=$LIVEKIT_KEY
 LIVEKIT_SECRET=$LIVEKIT_SECRET
+LIVEKIT_DOMAIN=$LIVEKIT_DOMAIN
+LIVEKIT_JWT_DOMAIN=$LIVEKIT_JWT_DOMAIN
+WEBRTC_PORT_START=$WEBRTC_PORT_START
+WEBRTC_PORT_END=$WEBRTC_PORT_END
+
 EOF
+fi
+
+if [ "$USE_JITSI_SELF_HOSTED" = "yes" ]; then
+    cat >> .env << EOF
+# Jitsi Meet Configuration
+JITSI_HTTP_PORT=8443
+JITSI_HTTPS_PORT=8444
+JITSI_ENABLE_AUTH=0
+JITSI_ENABLE_GUESTS=1
+JITSI_ENABLE_LETSENCRYPT=0
+JITSI_ENABLE_HTTP_REDIRECT=1
+JITSI_ENABLE_TRANSCRIPTIONS=0
+JITSI_DISABLE_HTTPS=1
+JITSI_ENABLE_RECORDING=0
+JITSI_AUTH_TYPE=internal
+JITSI_PUBLIC_URL=https://$JITSI_DOMAIN
+JITSI_DOCKER_HOST_ADDRESS=$SERVER_IP
+JICOFO_COMPONENT_SECRET=$JICOFO_COMPONENT_SECRET
+JICOFO_AUTH_PASSWORD=$JICOFO_AUTH_PASSWORD
+JVB_AUTH_PASSWORD=$JVB_AUTH_PASSWORD
+JIGASI_XMPP_PASSWORD=$JIGASI_XMPP_PASSWORD
+JIBRI_RECORDER_PASSWORD=$JIBRI_RECORDER_PASSWORD
+JIBRI_XMPP_PASSWORD=$JIBRI_XMPP_PASSWORD
+JVB_PORT=10000
+JVB_TCP_PORT=4443
+
+EOF
+fi
+
+if [ "$ENABLE_SYGNAL" = "yes" ]; then
+    cat >> .env << EOF
+# Sygnal Push Notification Gateway
+SYGNAL_PORT=127.0.0.1:5000
+PUSH_GATEWAY_URL=$PUSH_GATEWAY_URL
+PUSH_GATEWAY_ENABLED=true
+
+EOF
+fi
 print_success ".env file created with secure credentials"
 
 # Step 6: Start services
@@ -751,9 +1256,16 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     echo "  • Element Call:    http://localhost:$ELEMENT_CALL_PORT (with LiveKit backend)"
     echo "  • LiveKit SFU:     ws://localhost:$LIVEKIT_SFU_PORT"
     echo "  • lk-jwt-service:  http://localhost:$LIVEKIT_JWT_PORT"
+elif [ "$USE_JITSI_SELF_HOSTED" = "yes" ]; then
+    echo "  • Jitsi Meet:      http://localhost:8443"
+    echo "  • Jitsi (HTTPS):   https://localhost:8444 (if configured)"
 fi
 echo "  • Synapse API:     http://localhost:$SYNAPSE_PORT"
+echo "  • Synapse Federation: http://localhost:$FEDERATION_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
+if [ "$ENABLE_SYGNAL" = "yes" ]; then
+    echo "  • Sygnal Push:     http://localhost:5000"
+fi
 echo ""
 echo "Admin Credentials:"
 echo "  • Username: $ADMIN_USERNAME"
@@ -775,10 +1287,34 @@ EOF
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     cat >> .setup-config << EOF
 ELEMENT_CALL_PORT=$ELEMENT_CALL_PORT
+LIVEKIT_DOMAIN=$LIVEKIT_DOMAIN
+LIVEKIT_JWT_DOMAIN=$LIVEKIT_JWT_DOMAIN
+WEBRTC_PORT_START=$WEBRTC_PORT_START
+WEBRTC_PORT_END=$WEBRTC_PORT_END
+EOF
+elif [ "$USE_JITSI_SELF_HOSTED" = "yes" ]; then
+    cat >> .setup-config << EOF
+JITSI_DOMAIN=$JITSI_DOMAIN
+JITSI_SELF_HOSTED=yes
 EOF
 else
     cat >> .setup-config << EOF
 JITSI_DOMAIN=$JITSI_DOMAIN
+JITSI_EXTERNAL=yes
+EOF
+fi
+
+if [ "$ENABLE_SYGNAL" = "yes" ]; then
+    cat >> .setup-config << EOF
+SYGNAL_ENABLED=yes
+PUSH_GATEWAY_URL=$PUSH_GATEWAY_URL
+EOF
+fi
+
+if [ "$ENABLE_SERVER_NOTICES" = "yes" ]; then
+    cat >> .setup-config << EOF
+SERVER_NOTICES_ENABLED=yes
+SERVER_NOTICES_USER=$SERVER_NOTICES_USER
 EOF
 fi
 
