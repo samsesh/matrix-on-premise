@@ -453,6 +453,16 @@ verbose
 allow-loopback-peers
 cli-password=$COTURN_SECRET
 external-ip=$SERVER_IP
+relay-ip=$SERVER_IP
+listening-ip=0.0.0.0
+no-rfc5780
+no-stun-backward-compatibility
+total-quota=100
+stale-nonce=600
+bps-capacity=0
+no-multicast-peers
+mobility
+keep-address-family
 EOF
 chmod 600 coturn/turnserver.conf
 print_success "Coturn configuration created (permissions set to 600)"
