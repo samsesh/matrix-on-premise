@@ -68,6 +68,10 @@ services:
     depends_on:
       coturn:
         condition: service_started
+      # When using self-hosted OpenLDAP, add the dependency below so Synapse
+      # waits for the LDAP service to be healthy before starting:
+      # openldap:
+      #   condition: service_healthy
     networks:
       - matrix-network
 

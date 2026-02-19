@@ -783,6 +783,16 @@ services:
     depends_on:
       coturn:
         condition: service_started
+EOF
+# When self-hosted LDAP is used, synapse must wait for openldap to be ready
+# so that LDAP users can authenticate on first login (member provisioning)
+if [ "$USE_SELF_HOSTED_LDAP" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
+      openldap:
+        condition: service_healthy
+EOF
+fi
+cat >> docker-compose.yaml << EOF
     networks:
       - matrix-network
 
@@ -1245,6 +1255,7 @@ EOF
     if [ "$ENABLE_LDAP" = "yes" ]; then
         cat >> synapse/homeserver.yaml << EOF
 # LDAP authentication provider (matrix-synapse-ldap3)
+# LDAP users are provisioned as regular members, identical to locally registered users.
 modules:
   - module: ldap_auth_provider.LdapAuthProviderModule
     config:
@@ -1260,6 +1271,12 @@ modules:
       bind_dn: "$LDAP_BIND_DN"
       bind_password: "$LDAP_BIND_PASSWORD"
       filter: "$LDAP_FILTER"
+      # Allow LDAP users to log in even if their Matrix account already exists,
+      # making them full members just like any other chat user.
+      allow_existing_users: true
+      # Assign new LDAP users to this homeserver's domain so their Matrix IDs
+      # match the pattern @username:$MATRIX_DOMAIN, same as all other members.
+      default_domain: "$MATRIX_DOMAIN"
 
 EOF
         print_success "LDAP authentication configured in homeserver.yaml"
