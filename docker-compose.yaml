@@ -20,8 +20,31 @@ services:
     networks:
       - matrix-network
 
+  openldap:
+    image: bitnami/openldap:latest
+    restart: unless-stopped
+    environment:
+      - LDAP_ADMIN_USERNAME=${LDAP_ADMIN_USERNAME:-admin}
+      - LDAP_ADMIN_PASSWORD=${LDAP_ADMIN_PASSWORD:-adminpassword}
+      - LDAP_ROOT=${LDAP_BASE:-dc=example,dc=com}
+      - LDAP_LOGLEVEL=${LDAP_LOGLEVEL:-0}
+    volumes:
+      - openldap_data:/bitnami/openldap
+    ports:
+      - "${LDAP_PORT:-389}:1389"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1389 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - matrix-network
+
   synapse:
-    image: matrixdotorg/synapse:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.synapse
     restart: unless-stopped
     volumes:
       - ./synapse:/data
@@ -350,6 +373,9 @@ services:
       start_period: 10s
     networks:
       - matrix-network
+
+volumes:
+  openldap_data:
 
 networks:
   matrix-network:

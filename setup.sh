@@ -326,7 +326,97 @@ else
 fi
 
 echo ""
-print_info "=== Port Configuration ==="
+print_info "=== LDAP Authentication Configuration ==="
+echo ""
+echo "Enable LDAP authentication to allow users to log in with LDAP/Active Directory credentials?"
+echo ""
+read -p "Enable LDAP authentication? (yes/no) [default: no]: " ENABLE_LDAP
+ENABLE_LDAP=${ENABLE_LDAP:-no}
+
+if [ "$ENABLE_LDAP" = "yes" ] || [ "$ENABLE_LDAP" = "y" ]; then
+    ENABLE_LDAP="yes"
+    echo ""
+    echo "LDAP server options:"
+    echo "  1) Self-hosted OpenLDAP (will install OpenLDAP container)"
+    echo "  2) External LDAP server / Active Directory"
+    echo ""
+    read -p "Select option (1 or 2) [default: 1]: " LDAP_SERVER_CHOICE
+    LDAP_SERVER_CHOICE=${LDAP_SERVER_CHOICE:-1}
+    while [[ ! "$LDAP_SERVER_CHOICE" =~ ^[12]$ ]]; do
+        print_error "Invalid choice. Please enter 1 or 2."
+        read -p "Select option (1 or 2) [default: 1]: " LDAP_SERVER_CHOICE
+        LDAP_SERVER_CHOICE=${LDAP_SERVER_CHOICE:-1}
+    done
+
+    if [ "$LDAP_SERVER_CHOICE" = "1" ]; then
+        USE_SELF_HOSTED_LDAP="yes"
+        LDAP_URI="ldap://openldap:1389"
+        read -p "Enter LDAP base DN [default: dc=example,dc=com]: " LDAP_BASE
+        LDAP_BASE=${LDAP_BASE:-dc=example,dc=com}
+        read -p "Enter LDAP admin username [default: admin]: " LDAP_ADMIN_USERNAME
+        LDAP_ADMIN_USERNAME=${LDAP_ADMIN_USERNAME:-admin}
+        read -sp "Enter LDAP admin password: " LDAP_ADMIN_PASSWORD
+        echo ""
+        while [ -z "$LDAP_ADMIN_PASSWORD" ]; do
+            print_error "LDAP admin password cannot be empty."
+            read -sp "Enter LDAP admin password: " LDAP_ADMIN_PASSWORD
+            echo ""
+        done
+        LDAP_BIND_DN="cn=${LDAP_ADMIN_USERNAME},${LDAP_BASE}"
+        LDAP_BIND_PASSWORD="$LDAP_ADMIN_PASSWORD"
+        LDAP_PORT=389
+        print_success "Self-hosted OpenLDAP will be deployed at ldap://openldap:1389"
+    else
+        USE_SELF_HOSTED_LDAP="no"
+        read -p "Enter LDAP server URI (e.g., ldap://ldap.example.com:389): " LDAP_URI
+        while [ -z "$LDAP_URI" ]; do
+            print_error "LDAP URI cannot be empty."
+            read -p "Enter LDAP server URI: " LDAP_URI
+        done
+        read -p "Enter LDAP base DN (e.g., dc=example,dc=com): " LDAP_BASE
+        while [ -z "$LDAP_BASE" ]; do
+            print_error "LDAP base DN cannot be empty."
+            read -p "Enter LDAP base DN: " LDAP_BASE
+        done
+        read -p "Enter LDAP bind DN (e.g., cn=admin,dc=example,dc=com): " LDAP_BIND_DN
+        while [ -z "$LDAP_BIND_DN" ]; do
+            print_error "LDAP bind DN cannot be empty."
+            read -p "Enter LDAP bind DN: " LDAP_BIND_DN
+        done
+        read -sp "Enter LDAP bind password: " LDAP_BIND_PASSWORD
+        echo ""
+        while [ -z "$LDAP_BIND_PASSWORD" ]; do
+            print_error "LDAP bind password cannot be empty."
+            read -sp "Enter LDAP bind password: " LDAP_BIND_PASSWORD
+            echo ""
+        done
+        LDAP_ADMIN_USERNAME=""
+        LDAP_ADMIN_PASSWORD=""
+        print_success "Will use external LDAP server at: $LDAP_URI"
+    fi
+
+    read -p "Enter LDAP user filter [default: (objectClass=inetOrgPerson)]: " LDAP_FILTER
+    LDAP_FILTER=${LDAP_FILTER:-(objectClass=inetOrgPerson)}
+    read -p "Enter LDAP UID attribute [default: uid]: " LDAP_UID_ATTR
+    LDAP_UID_ATTR=${LDAP_UID_ATTR:-uid}
+    read -p "Enter LDAP mail attribute [default: mail]: " LDAP_MAIL_ATTR
+    LDAP_MAIL_ATTR=${LDAP_MAIL_ATTR:-mail}
+    read -p "Enter LDAP display name attribute [default: givenName]: " LDAP_NAME_ATTR
+    LDAP_NAME_ATTR=${LDAP_NAME_ATTR:-givenName}
+    read -p "Enable STARTTLS for LDAP? (yes/no) [default: no]: " LDAP_START_TLS_CHOICE
+    LDAP_START_TLS_CHOICE=${LDAP_START_TLS_CHOICE:-no}
+    if [ "$LDAP_START_TLS_CHOICE" = "yes" ] || [ "$LDAP_START_TLS_CHOICE" = "y" ]; then
+        LDAP_START_TLS="true"
+    else
+        LDAP_START_TLS="false"
+    fi
+    print_success "LDAP authentication configured"
+else
+    ENABLE_LDAP="no"
+    USE_SELF_HOSTED_LDAP="no"
+    print_info "LDAP authentication disabled"
+fi
+
 echo ""
 
 read -p "Element Web port [default: 8080]: " ELEMENT_PORT
@@ -417,6 +507,9 @@ if [ "$USE_ELEMENT_CALL" = "yes" ]; then
     echo "LiveKit SFU Domain: $LIVEKIT_DOMAIN"
 fi
 echo "Coturn Secret:    [generated - will be saved securely]"
+if [ "$ENABLE_LDAP" = "yes" ]; then
+    echo "LDAP Auth:        enabled ($LDAP_URI)"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -664,7 +757,9 @@ services:
       - matrix-network
 
   synapse:
-    image: matrixdotorg/synapse:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.synapse
     restart: unless-stopped
     volumes:
       - ./synapse:/data
@@ -732,6 +827,35 @@ services:
     networks:
       - matrix-network
 EOF
+
+# Add OpenLDAP service if self-hosted LDAP is selected
+if [ "$USE_SELF_HOSTED_LDAP" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
+
+  openldap:
+    image: bitnami/openldap:latest
+    restart: unless-stopped
+    environment:
+      - LDAP_ADMIN_USERNAME=\${LDAP_ADMIN_USERNAME:-admin}
+      - LDAP_ADMIN_PASSWORD=\${LDAP_ADMIN_PASSWORD:-adminpassword}
+      - LDAP_ROOT=\${LDAP_BASE:-dc=example,dc=com}
+      - LDAP_LOGLEVEL=\${LDAP_LOGLEVEL:-0}
+    volumes:
+      - openldap_data:/bitnami/openldap
+    ports:
+      - "\${LDAP_PORT:-389}:1389"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1389 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - matrix-network
+EOF
+    print_success "OpenLDAP service configured"
+fi
+
 
 # Add Element Call and LiveKit services if selected
 if [ "$USE_ELEMENT_CALL" = "yes" ]; then
@@ -987,6 +1111,15 @@ networks:
     name: matrix-network
     driver: bridge
 EOF
+
+# Add named volumes if OpenLDAP is enabled
+if [ "$USE_SELF_HOSTED_LDAP" = "yes" ]; then
+    cat >> docker-compose.yaml << EOF
+
+volumes:
+  openldap_data:
+EOF
+fi
 print_success "docker-compose.yml updated"
 
 # Step 5: Generate Synapse configuration
@@ -1106,6 +1239,30 @@ push:
 
 EOF
         print_success "Push gateway configuration added"
+    fi
+
+    # Add LDAP auth provider configuration if enabled
+    if [ "$ENABLE_LDAP" = "yes" ]; then
+        cat >> synapse/homeserver.yaml << EOF
+# LDAP authentication provider (matrix-synapse-ldap3)
+modules:
+  - module: ldap_auth_provider.LdapAuthProviderModule
+    config:
+      enabled: true
+      mode: simple_bind
+      uri: "$LDAP_URI"
+      start_tls: $LDAP_START_TLS
+      base: "$LDAP_BASE"
+      attributes:
+        uid: "$LDAP_UID_ATTR"
+        mail: "$LDAP_MAIL_ATTR"
+        name: "$LDAP_NAME_ATTR"
+      bind_dn: "$LDAP_BIND_DN"
+      bind_password: "$LDAP_BIND_PASSWORD"
+      filter: "$LDAP_FILTER"
+
+EOF
+        print_success "LDAP authentication configured in homeserver.yaml"
     fi
     
     print_success "TURN server and MatrixRTC configured in homeserver.yaml"
@@ -1230,6 +1387,34 @@ PUSH_GATEWAY_ENABLED=true
 
 EOF
 fi
+
+if [ "$ENABLE_LDAP" = "yes" ]; then
+    cat >> .env << EOF
+# LDAP Authentication
+LDAP_ENABLED=true
+LDAP_URI=$LDAP_URI
+LDAP_BASE=$LDAP_BASE
+LDAP_BIND_DN=$LDAP_BIND_DN
+LDAP_BIND_PASSWORD=$LDAP_BIND_PASSWORD
+LDAP_FILTER=$LDAP_FILTER
+LDAP_UID_ATTR=$LDAP_UID_ATTR
+LDAP_MAIL_ATTR=$LDAP_MAIL_ATTR
+LDAP_NAME_ATTR=$LDAP_NAME_ATTR
+LDAP_START_TLS=$LDAP_START_TLS
+EOF
+    if [ "$USE_SELF_HOSTED_LDAP" = "yes" ]; then
+        cat >> .env << EOF
+LDAP_ADMIN_USERNAME=$LDAP_ADMIN_USERNAME
+LDAP_ADMIN_PASSWORD=$LDAP_ADMIN_PASSWORD
+LDAP_PORT=$LDAP_PORT
+LDAP_LOGLEVEL=0
+EOF
+    fi
+    cat >> .env << EOF
+
+EOF
+fi
+
 print_success ".env file created with secure credentials"
 
 # Step 6: Start services
@@ -1275,6 +1460,9 @@ echo "  • Synapse Federation: http://localhost:$FEDERATION_PORT"
 echo "  • Admin Panel:     http://localhost:$ADMIN_PORT"
 if [ "$ENABLE_SYGNAL" = "yes" ]; then
     echo "  • Sygnal Push:     http://localhost:5000"
+fi
+if [ "$ENABLE_LDAP" = "yes" ] && [ "$USE_SELF_HOSTED_LDAP" = "yes" ]; then
+    echo "  • OpenLDAP:        ldap://localhost:$LDAP_PORT"
 fi
 echo ""
 echo "Admin Credentials:"
@@ -1325,6 +1513,15 @@ if [ "$ENABLE_SERVER_NOTICES" = "yes" ]; then
     cat >> .setup-config << EOF
 SERVER_NOTICES_ENABLED=yes
 SERVER_NOTICES_USER=$SERVER_NOTICES_USER
+EOF
+fi
+
+if [ "$ENABLE_LDAP" = "yes" ]; then
+    cat >> .setup-config << EOF
+LDAP_ENABLED=yes
+LDAP_URI=$LDAP_URI
+LDAP_BASE=$LDAP_BASE
+LDAP_SELF_HOSTED=$USE_SELF_HOSTED_LDAP
 EOF
 fi
 
