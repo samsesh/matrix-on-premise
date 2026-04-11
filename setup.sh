@@ -692,7 +692,8 @@ services:
       - matrix-network
 
   element:
-    image: vectorim/element-web:latest
+    #image: vectorim/element-web:latest 
+    image: ghcr.io/etkecc/schildichat-web:latest
     restart: unless-stopped
     volumes:
       - ./element-config.json:/app/config.json
@@ -714,7 +715,8 @@ services:
       - matrix-network
 
   synapse-admin:
-    image: awesometechnologies/synapse-admin
+    #image: awesometechnologies/synapse-admin
+    image: ghcr.io/etkecc/ketesa:latest
     restart: unless-stopped
     ports:
       - "$ADMIN_PORT:80"
