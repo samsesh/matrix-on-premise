@@ -693,7 +693,7 @@ services:
 
   element:
     #image: vectorim/element-web:latest 
-    image: ghcr.io/etkecc/schildichat-web:latest
+    image: ghcr.io/schildichat/schildichat-web:latest
     restart: unless-stopped
     volumes:
       - ./element-config.json:/app/config.json
@@ -719,7 +719,7 @@ services:
     image: ghcr.io/etkecc/ketesa:latest
     restart: unless-stopped
     ports:
-      - "$ADMIN_PORT:80"
+      - "$ADMIN_PORT:8080"
     environment:
       - REACT_APP_SERVER=http://synapse:8008
     healthcheck:
