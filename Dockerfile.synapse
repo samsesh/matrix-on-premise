@@ -1,0 +1,2 @@
+FROM matrixdotorg/synapse:latest
+RUN pip install --no-cache-dir matrix-synapse-ldap3
